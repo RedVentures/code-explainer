@@ -1,0 +1,3 @@
+export const MAX_DIFF_CHARS = 12000;
+export const MAX_SELECTION_CHARS = 4000;
+export const MAX_SURROUNDING_CHARS = 3000;

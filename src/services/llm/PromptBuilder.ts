@@ -1,0 +1,105 @@
+import { BranchContext, PromptInput, RepoContext, SelectionContext } from "../../models/types";
+
+const sharedSystem = [
+  "You are an expert software engineer helping a developer understand code.",
+  "Return concise, structured markdown with these sections when relevant:",
+  "Summary, Role in System, How It Works, Key Relationships, Changed From Main, What To Read Next, Open Questions.",
+  "Ground claims in the supplied context. If context is insufficient, say so plainly.",
+].join(" ");
+
+export class PromptBuilder {
+  public buildRepoPrompt(context: RepoContext): PromptInput {
+    return {
+      system: sharedSystem,
+      user: [
+        "Explain this repository at a high level.",
+        `Workspace: ${context.workspaceName}`,
+        `Root path: ${context.rootPath}`,
+        `Top-level entries:\n${context.topLevelEntries.join("\n") || "(none)"}`,
+        `Manifest files:\n${context.manifests.join("\n") || "(none)"}`,
+        `README/docs files:\n${context.readmes.join("\n") || "(none)"}`,
+        `Sample file list:\n${context.files.join("\n") || "(none)"}`,
+      ].join("\n\n"),
+    };
+  }
+
+  public buildBranchPrompt(context: BranchContext): PromptInput {
+    return {
+      system: sharedSystem,
+      user: [
+        `Explain the current branch against ${context.baseBranch}.`,
+        `Branch: ${context.branchName}`,
+        `Merge base: ${context.mergeBase ?? "unknown"}`,
+        `Changed files:\n${context.changedFiles.join("\n") || "(none)"}`,
+        `Diff excerpt:\n${context.diff || "(no diff available)"}`,
+      ].join("\n\n"),
+    };
+  }
+
+  public buildSelectionPrompt(context: SelectionContext): PromptInput {
+    return {
+      system: sharedSystem,
+      user: [
+        "Explain the selected code in context.",
+        `File: ${context.filePath}`,
+        `Lines: ${context.startLine}-${context.endLine}`,
+        `Enclosing symbol: ${context.symbolName ?? "unknown"}`,
+        `Imports:\n${context.imports.join("\n") || "(none)"}`,
+        `Selection:\n${context.selection}`,
+        `Surrounding text:\n${context.surroundingText}`,
+      ].join("\n\n"),
+    };
+  }
+
+  public buildFlowPrompt(context: SelectionContext): PromptInput {
+    return {
+      system: [
+        "You are an expert software engineer building a code-comprehension flow chart.",
+        "Return valid JSON only. No markdown fences. No prose outside the JSON object.",
+        'Use this schema: {"headline": string, "summary": string, "notes": string[], "flowChart": {"title": string, "kind": "execution", "nodes": [{"id": string, "title": string, "subtitle": string, "lane": "entry"|"logic"|"data"|"external"|"unknown", "order": number, "fileRef": {"path": string, "startLine": number, "label": string} | null}], "edges": [{"from": string, "to": string, "label": string | null}]}}.',
+        "Keep the chart to 4-8 nodes. Prefer boxes that help a human read the code path.",
+        "If something is inferred rather than explicit, say that in notes or subtitle.",
+      ].join(" "),
+      user: [
+        "Draw a flow chart for the selected code.",
+        `File: ${context.filePath}`,
+        `Lines: ${context.startLine}-${context.endLine}`,
+        `Enclosing symbol: ${context.symbolName ?? "unknown"}`,
+        `Imports:\n${context.imports.join("\n") || "(none)"}`,
+        `Selection:\n${context.selection}`,
+        `Surrounding text:\n${context.surroundingText}`,
+      ].join("\n\n"),
+    };
+  }
+
+  public buildBranchFlowPrompt(context: { repo: RepoContext; branchName: string }): PromptInput {
+    return {
+      system: [
+        "You are an expert software engineer building a branch-level code-comprehension flow chart.",
+        "Return valid JSON only. No markdown fences. No prose outside the JSON object.",
+        'Use this schema: {"headline": string, "summary": string, "notes": string[], "flowChart": {"title": string, "kind": "workflow"|"impact", "nodes": [{"id": string, "title": string, "subtitle": string, "lane": "entry"|"logic"|"data"|"external"|"unknown", "order": number, "fileRef": {"path": string, "startLine": number, "label": string} | null}], "edges": [{"from": string, "to": string, "label": string | null}]}}.',
+        "The chart should describe the overall architecture of the current branch as it exists now.",
+        "Keep the chart to 5-10 nodes. Group related files or subsystems into meaningful boxes instead of listing everything.",
+        "Prefer a vertical top-to-bottom architecture diagram with clear layers.",
+        "Every node must have a short subtitle describing what it does in 3-7 words.",
+        "Use clear full words only. Never use broken abbreviations or clipped words like des, mgr, svc, cfg unless they are exact code identifiers the user would already know.",
+        "Titles should usually be 1-3 words and at most 24 characters when possible.",
+        "Subtitles should usually be 1 line and at most 36 characters. Keep them concrete and human-readable.",
+        "Do not cram multiple ideas into one node. Split them into separate nodes if needed.",
+        "Avoid crossing relationships. Favor a simple mainline flow with a few side connections at most.",
+        "Focus on the current branch snapshot, not on diffs versus another branch.",
+        "If architectural intent is partially inferred, say that in notes or subtitle.",
+      ].join(" "),
+      user: [
+        `Draw an overall diagram for the current branch.`,
+        `Workspace: ${context.repo.workspaceName}`,
+        `Root path: ${context.repo.rootPath}`,
+        `Top-level entries:\n${context.repo.topLevelEntries.join("\n") || "(none)"}`,
+        `Manifest files:\n${context.repo.manifests.join("\n") || "(none)"}`,
+        `README/docs files:\n${context.repo.readmes.join("\n") || "(none)"}`,
+        `Branch: ${context.branchName}`,
+        `Sample file list:\n${context.repo.files.join("\n") || "(none)"}`,
+      ].join("\n\n"),
+    };
+  }
+}

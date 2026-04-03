@@ -1,0 +1,160 @@
+{
+  "name": "code-explainer",
+  "displayName": "Code Explainer",
+  "description": "Branch-aware code comprehension for VS Code.",
+  "version": "0.0.1",
+  "publisher": "charley",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:codeExplainer.explainRepo",
+    "onCommand:codeExplainer.explainSelection",
+    "onCommand:codeExplainer.compareBranch",
+    "onCommand:codeExplainer.traceRelationships",
+    "onCommand:codeExplainer.drawFlowChart",
+    "onView:codeExplainer.sidebar"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeExplainer.explainRepo",
+        "title": "Code Explainer: Explain Repo"
+      },
+      {
+        "command": "codeExplainer.explainSelection",
+        "title": "Code Explainer: Explain Selection"
+      },
+      {
+        "command": "codeExplainer.compareBranch",
+        "title": "Code Explainer: Compare Branch with Main"
+      },
+      {
+        "command": "codeExplainer.traceRelationships",
+        "title": "Code Explainer: Trace Relationships"
+      },
+      {
+        "command": "codeExplainer.drawFlowChart",
+        "title": "Code Explainer: Draw Current Branch Diagram"
+      },
+      {
+        "command": "codeExplainer.refreshSidebar",
+        "title": "Code Explainer: Refresh Sidebar"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codeExplainer",
+          "title": "Code Explainer",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "codeExplainer": [
+        {
+          "id": "codeExplainer.sidebar",
+          "name": "Overview"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "codeExplainer.explainSelection",
+          "group": "navigation@100"
+        },
+        {
+          "command": "codeExplainer.traceRelationships",
+          "group": "navigation@101"
+        },
+        {
+          "command": "codeExplainer.drawFlowChart",
+          "group": "navigation@102"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "codeExplainer.explainRepo",
+          "group": "navigation@100"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Code Explainer",
+      "properties": {
+        "codeExplainer.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "default": "openai",
+          "description": "The LLM provider used for analysis."
+        },
+        "codeExplainer.baseBranch": {
+          "type": "string",
+          "default": "main",
+          "description": "Default branch to compare against."
+        },
+        "codeExplainer.maxFilesInContext": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "description": "Maximum number of files to include when building repo context."
+        },
+        "codeExplainer.enableDiagrams": {
+          "type": "boolean",
+          "default": true,
+          "description": "Render custom flow-chart visualizations in the explanation panel when available."
+        },
+        "codeExplainer.openai.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "OpenAI API key. Prefer moving this to SecretStorage in a later iteration."
+        },
+        "codeExplainer.openai.model": {
+          "type": "string",
+          "default": "gpt-4.1-mini",
+          "description": "OpenAI model name."
+        },
+        "codeExplainer.openai.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "Override the OpenAI-compatible base URL."
+        },
+        "codeExplainer.anthropic.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Anthropic API key. Prefer moving this to SecretStorage in a later iteration."
+        },
+        "codeExplainer.anthropic.model": {
+          "type": "string",
+          "default": "claude-3-7-sonnet-latest",
+          "description": "Anthropic model name."
+        },
+        "codeExplainer.anthropic.baseUrl": {
+          "type": "string",
+          "default": "https://api.anthropic.com/v1",
+          "description": "Override the Anthropic base URL."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.4"
+  }
+}
