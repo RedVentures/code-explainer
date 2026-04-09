@@ -15,6 +15,7 @@
     "onCommand:codeExplainer.explainRepo",
     "onCommand:codeExplainer.explainSelection",
     "onCommand:codeExplainer.compareBranch",
+    "onCommand:codeExplainer.generatePrDescription",
     "onCommand:codeExplainer.traceRelationships",
     "onCommand:codeExplainer.drawFlowChart",
     "onView:codeExplainer.sidebar"
@@ -37,6 +38,10 @@
       {
         "command": "codeExplainer.traceRelationships",
         "title": "Code Explainer: Trace Relationships"
+      },
+      {
+        "command": "codeExplainer.generatePrDescription",
+        "title": "Code Explainer: Generate PR Description"
       },
       {
         "command": "codeExplainer.drawFlowChart",
@@ -77,12 +82,20 @@
         {
           "command": "codeExplainer.drawFlowChart",
           "group": "navigation@102"
+        },
+        {
+          "command": "codeExplainer.generatePrDescription",
+          "group": "navigation@103"
         }
       ],
       "explorer/context": [
         {
           "command": "codeExplainer.explainRepo",
           "group": "navigation@100"
+        },
+        {
+          "command": "codeExplainer.generatePrDescription",
+          "group": "navigation@101"
         }
       ]
     },
@@ -113,6 +126,27 @@
           "type": "boolean",
           "default": true,
           "description": "Render custom flow-chart visualizations in the explanation panel when available."
+        },
+        "codeExplainer.prDescription.defaultStyle": {
+          "type": "string",
+          "enum": [
+            "business-stakeholder",
+            "code-collaborator",
+            "manager",
+            "other"
+          ],
+          "default": "manager",
+          "description": "Default audience/style for generated PR descriptions."
+        },
+        "codeExplainer.prDescription.defaultGuidelines": {
+          "type": "string",
+          "default": "",
+          "description": "Optional default team guidance or house rules to apply when generating PR descriptions."
+        },
+        "codeExplainer.prDescription.defaultTemplate": {
+          "type": "string",
+          "default": "",
+          "description": "Optional default markdown template or preferred section structure for generated PR descriptions."
         },
         "codeExplainer.openai.apiKey": {
           "type": "string",

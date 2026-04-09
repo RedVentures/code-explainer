@@ -35,7 +35,7 @@ export function toRepoSummary(markdown: string): RepoSummary {
     kind: "repo",
     headline: cards[0]?.body.split("\n")[0] ?? "Repository overview",
     cards,
-    nextActions: ["Explain current branch", "Explain selection", "Trace relationships"],
+    nextActions: ["Explain current branch", "Explain selection", "Trace relationships", "Generate PR Description"],
   };
 }
 
@@ -66,6 +66,7 @@ export function toBranchSummary(markdown: string, branchName: string, baseBranch
     cards,
     changedFiles,
     risks: [],
+    flowChart: undefined,
   };
 }
 
@@ -86,7 +87,7 @@ export function toSelectionExplanation(
     kind: "selection",
     headline,
     cards,
-    nextActions: ["Draw current branch diagram", "Trace relationships", "Compare branch with main"],
+    nextActions: ["Draw current branch diagram", "Trace relationships", "Compare branch with main", "Generate PR Description"],
   };
 }
 
@@ -96,7 +97,7 @@ export function toTraceExplanation(markdown: string): TraceExplanation {
     kind: "trace",
     headline: cards[0]?.body.split("\n")[0] ?? "Relationship overview",
     cards,
-    nextActions: ["Draw current branch diagram", "Explain selection", "Compare branch with main"],
+    nextActions: ["Draw current branch diagram", "Explain selection", "Compare branch with main", "Generate PR Description"],
   };
 }
 
@@ -115,7 +116,7 @@ export function toFlowExplanation(options: {
     kind: "flow",
     headline: options.headline,
     cards,
-    nextActions: ["Explain selection", "Trace relationships", "Compare branch with main"],
+    nextActions: ["Explain selection", "Trace relationships", "Compare branch with main", "Generate PR Description"],
     flowChart: options.flowChart,
   };
 }

@@ -1,11 +1,20 @@
-import { AnalysisResult, FileRef, FlowChart, FlowLane } from "../../models/types";
+import {
+  AnalysisResult,
+  FileRef,
+  FlowChart,
+  FlowLane,
+  PrDescriptionExplanation,
+  PrDescriptionStyle,
+} from "../../models/types";
 import { formatFileRef } from "../../utils/refs";
 
 function escapeHtml(input: string): string {
   return input
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function renderRefs(refs: FileRef[] | undefined): string {
@@ -95,6 +104,10 @@ function encodeFlowChart(flowChart: FlowChart | undefined): string {
 }
 
 export function renderHtml(title: string, result: AnalysisResult): string {
+  if (result.kind === "prDescription") {
+    return renderPrDescriptionHtml(title, result);
+  }
+
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -746,6 +759,282 @@ export function renderHtml(title: string, result: AnalysisResult): string {
             const action = actionElement ? actionElement.getAttribute("data-action") : null;
             if (action) {
               vscode.postMessage({ type: "action", action });
+              return;
+            }
+
+            const fileRefElement = target.closest("[data-file-ref]");
+            const fileRef = fileRefElement ? fileRefElement.getAttribute("data-file-ref") : null;
+            if (fileRef) {
+              event.preventDefault();
+              vscode.postMessage({ type: "fileRef", fileRef });
+            }
+          });
+        </script>
+      </body>
+    </html>
+  `;
+}
+
+function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation): string {
+  const styleOptions: Array<{ value: PrDescriptionStyle; label: string }> = [
+    { value: "business-stakeholder", label: "Business stakeholder" },
+    { value: "code-collaborator", label: "Code collaborator" },
+    { value: "manager", label: "Manager" },
+    { value: "other", label: "Other" },
+  ];
+  const statusLabel = {
+    "no-pr": "No PR found",
+    "existing-empty": "PR found with empty description",
+    "existing-with-description": "PR found with existing description",
+  }[result.prState];
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>${escapeHtml(title)}</title>
+        <style>
+          :root {
+            color-scheme: light dark;
+            --bg: #07111f;
+            --panel: #0f1b2d;
+            --panel-alt: #15243c;
+            --text: #ecf3ff;
+            --muted: #98abc9;
+            --accent: #7dd3fc;
+            --accent-strong: #38bdf8;
+            --success: #86efac;
+            --warn: #fde68a;
+            --border: rgba(125, 211, 252, 0.18);
+          }
+          body {
+            margin: 0;
+            padding: 24px;
+            background:
+              radial-gradient(circle at top right, rgba(125, 211, 252, 0.15), transparent 32%),
+              linear-gradient(180deg, #07111f 0%, #0a1324 100%);
+            color: var(--text);
+            font: 14px/1.5 "SF Mono", Monaco, Consolas, monospace;
+          }
+          h1 {
+            margin: 0 0 16px;
+            font-size: 24px;
+          }
+          .headline,
+          .card,
+          .editor {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: rgba(15, 27, 45, 0.9);
+          }
+          .headline {
+            padding: 16px 18px;
+            margin-bottom: 20px;
+          }
+          .state-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+          }
+          .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(125, 211, 252, 0.14);
+            color: var(--accent);
+          }
+          .badge.warn {
+            color: #fbbf24;
+            background: rgba(251, 191, 36, 0.12);
+          }
+          .badge.success {
+            color: var(--success);
+            background: rgba(134, 239, 172, 0.12);
+          }
+          .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 0 0 20px;
+          }
+          .action {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 10px 14px;
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            font: inherit;
+          }
+          .action.primary {
+            background: rgba(56, 189, 248, 0.14);
+            border-color: rgba(56, 189, 248, 0.38);
+            color: #e0f2fe;
+          }
+          .editor {
+            padding: 18px;
+            margin-bottom: 18px;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+          }
+          .field {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+          }
+          .field-label {
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+          input,
+          select,
+          textarea {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(21, 36, 60, 0.85);
+            color: var(--text);
+            padding: 12px;
+            font: inherit;
+          }
+          textarea {
+            width: 100%;
+            min-height: 140px;
+            resize: vertical;
+            box-sizing: border-box;
+          }
+          textarea#pr-body {
+            min-height: 360px;
+          }
+          .hint {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 12px;
+          }
+          .card {
+            margin-bottom: 16px;
+            padding: 16px 18px;
+          }
+          h2 {
+            margin: 0 0 12px;
+            font-size: 16px;
+          }
+          pre {
+            margin: 0;
+            color: var(--text);
+            white-space: pre-wrap;
+            font: inherit;
+          }
+          .refs {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+          }
+          .refs-title {
+            margin-bottom: 8px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-size: 11px;
+          }
+          ul {
+            margin: 0;
+            padding-left: 18px;
+          }
+          a {
+            color: var(--accent);
+          }
+        </style>
+      </head>
+      <body>
+        <h1>${escapeHtml(title)}</h1>
+        <div class="headline">
+          <div>${escapeHtml(result.headline)}</div>
+          <div class="state-row">
+            <span class="badge">${escapeHtml(statusLabel)}</span>
+            <span class="badge ${result.hasRemoteBranch ? "success" : "warn"}">${result.hasRemoteBranch ? "Remote branch ready" : "Local branch only"}</span>
+            ${result.existingPrUrl ? `<a class="badge" href="${escapeHtml(result.existingPrUrl)}" target="_blank" rel="noreferrer">PR #${escapeHtml(String(result.existingPrNumber ?? ""))}</a>` : ""}
+          </div>
+        </div>
+        <div class="toolbar">
+          <button class="action" data-refresh="true">Refresh from Branch</button>
+          <button class="action" data-pr-regenerate="true">Regenerate</button>
+          <button class="action primary" data-pr-apply="true">Apply to GitHub</button>
+        </div>
+        <section class="editor">
+          <div class="grid">
+            <label class="field">
+              <span class="field-label">Description Style</span>
+              <select id="pr-style">
+                ${styleOptions
+                  .map((option) => `<option value="${option.value}"${option.value === result.style ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
+                  .join("")}
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">Suggested PR Title</span>
+              <input id="pr-title" type="text" value="${escapeHtml(result.draftTitle)}" />
+            </label>
+          </div>
+          <label class="field">
+            <span class="field-label">Custom Instructions</span>
+            <textarea id="pr-custom-instructions" placeholder="Add one-off guidance for this PR draft.">${escapeHtml(result.customInstructions)}</textarea>
+          </label>
+          <div class="hint">Panel instructions override saved defaults when you regenerate.</div>
+          <label class="field" style="margin-top:16px;">
+            <span class="field-label">PR Description Draft</span>
+            <textarea id="pr-body">${escapeHtml(result.draftBody)}</textarea>
+          </label>
+        </section>
+        ${renderCards(result)}
+        <script>
+          const vscode = acquireVsCodeApi();
+
+          function readDraftState() {
+            const title = document.getElementById("pr-title");
+            const body = document.getElementById("pr-body");
+            const style = document.getElementById("pr-style");
+            const customInstructions = document.getElementById("pr-custom-instructions");
+
+            return {
+              title: title instanceof HTMLInputElement ? title.value : "",
+              body: body instanceof HTMLTextAreaElement ? body.value : "",
+              style: style instanceof HTMLSelectElement ? style.value : "manager",
+              customInstructions: customInstructions instanceof HTMLTextAreaElement ? customInstructions.value : "",
+            };
+          }
+
+          document.addEventListener("click", (event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+              return;
+            }
+
+            const refreshElement = target.closest("[data-refresh]");
+            if (refreshElement) {
+              vscode.postMessage({ type: "refresh" });
+              return;
+            }
+
+            const regenerateElement = target.closest("[data-pr-regenerate]");
+            if (regenerateElement) {
+              vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
+              return;
+            }
+
+            const applyElement = target.closest("[data-pr-apply]");
+            if (applyElement) {
+              vscode.postMessage({ type: "prApply", ...readDraftState() });
               return;
             }
 
