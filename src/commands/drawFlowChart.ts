@@ -12,7 +12,7 @@ export function createDrawFlowChartCommand(
   cache: CacheService,
   sidebarProvider: CodeExplainerProvider
 ) {
-  return async (forceRefresh = false) => {
+  return async (directoryPath?: string, forceRefresh = false) => {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
     if (!workspaceRoot) {
@@ -25,8 +25,21 @@ export function createDrawFlowChartCommand(
     }
 
     const branchName = await git.getCurrentBranch();
-    const cacheKey = `flow:${workspaceRoot}:${branchName}`;
-    const label = `Diagram: ${branchName}`;
+
+    let cacheKey: string;
+    let label: string;
+    let loadingMessage: string;
+
+    if (directoryPath) {
+      const dirName = directoryPath.split("/").pop() || "directory";
+      cacheKey = `flow:${workspaceRoot}:${branchName}:${directoryPath}`;
+      label = `Diagram: ${dirName}`;
+      loadingMessage = `Building a diagram for the ${dirName} directory.`;
+    } else {
+      cacheKey = `flow:${workspaceRoot}:${branchName}`;
+      label = `Diagram: ${branchName}`;
+      loadingMessage = `Building an overall diagram for ${branchName}.`;
+    }
 
     await showCachedOrFresh({
       panel,
@@ -34,10 +47,10 @@ export function createDrawFlowChartCommand(
       sidebarProvider,
       cacheKey,
       label,
-      source: { kind: "flow", branchName },
-      loadingMessage: `Building an overall diagram for ${branchName}.`,
+      source: { kind: "flow", branchName, directoryPath },
+      loadingMessage,
       forceRefresh,
-      getFresh: () => analysisService.analyze(),
+      getFresh: () => analysisService.analyze(directoryPath),
       render: (result, refresh) =>
         panel.show(result, {
           onAction: (action) => void handlePanelAction(action, panel),

@@ -181,7 +181,7 @@ export type CachedResultSource =
   | { kind: "branch"; baseBranch: string }
   | ({ kind: "selection" } & SelectionTarget)
   | ({ kind: "trace" } & SelectionTarget)
-  | { kind: "flow"; branchName: string };
+  | { kind: "flow"; branchName: string; directoryPath?: string };
 
 export type CachedResultEntry = {
   key: string;

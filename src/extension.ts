@@ -119,6 +119,7 @@ async function refreshCachedEntry(
   ) => Promise<void>,
   compareBranch: (forceRefresh?: boolean) => Promise<void>,
   drawFlowChart: (
+    directoryPath?: string,
     forceRefresh?: boolean
   ) => Promise<void>,
   traceRelationships: (
@@ -140,7 +141,7 @@ async function refreshCachedEntry(
       await explainSelection(true, entry.source);
       return;
     case "flow":
-      await drawFlowChart(true);
+      await drawFlowChart(entry.source.directoryPath, true);
       return;
     case "trace":
       await traceRelationships(true, entry.source);
