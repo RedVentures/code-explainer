@@ -880,6 +880,12 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             padding: 18px;
             margin-bottom: 18px;
           }
+          .draft-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+            gap: 18px;
+            align-items: start;
+          }
           .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -915,6 +921,62 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           }
           textarea#pr-body {
             min-height: 360px;
+          }
+          .preview-panel {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(21, 36, 60, 0.55);
+            padding: 14px;
+            min-height: 360px;
+          }
+          .preview-panel h3 {
+            margin: 0 0 12px;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+          }
+          .preview-body {
+            display: grid;
+            gap: 12px;
+            color: var(--text);
+          }
+          .preview-body:empty::before {
+            content: "Live markdown preview will appear here.";
+            color: var(--muted);
+          }
+          .preview-body p,
+          .preview-body ul,
+          .preview-body ol,
+          .preview-body blockquote,
+          .preview-body pre,
+          .preview-body hr {
+            margin: 0;
+          }
+          .preview-body ul,
+          .preview-body ol {
+            padding-left: 18px;
+          }
+          .preview-body blockquote {
+            border-left: 3px solid var(--border);
+            padding-left: 12px;
+            color: var(--muted);
+          }
+          .preview-body code {
+            font: inherit;
+            padding: 1px 5px;
+            border-radius: 6px;
+            background: rgba(125, 211, 252, 0.12);
+          }
+          .preview-body pre {
+            padding: 12px;
+            border-radius: 10px;
+            background: rgba(7, 17, 31, 0.8);
+            overflow-x: auto;
+          }
+          .preview-body pre code {
+            padding: 0;
+            background: transparent;
           }
           .hint {
             margin-top: 8px;
@@ -954,6 +1016,11 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           a {
             color: var(--accent);
           }
+          @media (max-width: 900px) {
+            .draft-layout {
+              grid-template-columns: 1fr;
+            }
+          }
         </style>
       </head>
       <body>
@@ -967,9 +1034,10 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           </div>
         </div>
         <div class="toolbar">
-          <button class="action" data-refresh="true">Refresh from Branch</button>
-          <button class="action" data-pr-regenerate="true">Regenerate</button>
-          <button class="action primary" data-pr-apply="true">Apply to GitHub</button>
+          <button type="button" class="action" id="pr-refresh-button" data-refresh="true">Refresh from Branch</button>
+          <button type="button" class="action" id="pr-regenerate-button" data-pr-regenerate="true">Regenerate</button>
+          <button type="button" class="action primary" id="pr-apply-button" data-pr-apply="true">Apply to GitHub</button>
+          <span class="badge" id="pr-script-status">Script pending</span>
         </div>
         <section class="editor">
           <div class="grid">
@@ -991,16 +1059,39 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             <textarea id="pr-custom-instructions" placeholder="Add one-off guidance for this PR draft.">${escapeHtml(result.customInstructions)}</textarea>
           </label>
           <div class="hint">Panel instructions override saved defaults when you regenerate.</div>
-          <label class="field" style="margin-top:16px;">
-            <span class="field-label">PR Description Draft</span>
-            <textarea id="pr-body">${escapeHtml(result.draftBody)}</textarea>
-          </label>
+          <div class="draft-layout" style="margin-top:16px;">
+            <label class="field">
+              <span class="field-label">PR Description Draft</span>
+              <textarea id="pr-body">${escapeHtml(result.draftBody)}</textarea>
+            </label>
+            <section class="preview-panel">
+              <h3>Markdown Preview</h3>
+              <div class="preview-body" id="pr-preview"></div>
+            </section>
+          </div>
         </section>
         ${renderCards(result)}
         <script>
-          const vscode = acquireVsCodeApi();
+          const scriptStatus = document.getElementById("pr-script-status");
+          const setScriptStatus = (text, state) => {
+            if (!(scriptStatus instanceof HTMLElement)) {
+              return;
+            }
 
-          function readDraftState() {
+            scriptStatus.textContent = text;
+            scriptStatus.classList.remove("success", "warn");
+            if (state) {
+              scriptStatus.classList.add(state);
+            }
+          };
+
+          try {
+            setScriptStatus("Booting…");
+            const vscode = acquireVsCodeApi();
+            console.log("[Code Explainer] PR description webview script booted");
+            setScriptStatus("Script ready", "success");
+
+            function readDraftState() {
             const title = document.getElementById("pr-title");
             const body = document.getElementById("pr-body");
             const style = document.getElementById("pr-style");
@@ -1012,39 +1103,190 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               style: style instanceof HTMLSelectElement ? style.value : "manager",
               customInstructions: customInstructions instanceof HTMLTextAreaElement ? customInstructions.value : "",
             };
+            }
+
+            function escapePreviewHtml(value) {
+            return value
+              .replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;");
+            }
+
+            function renderInlineMarkdown(text) {
+            const backtick = String.fromCharCode(96);
+            return text
+              .replace(new RegExp(backtick + "([^" + backtick + "]+)" + backtick, "g"), "<code>$1</code>")
+              .replace(new RegExp("\\\\*\\\\*([^*]+)\\\\*\\\\*", "g"), "<strong>$1</strong>")
+              .replace(new RegExp("\\\\*([^*]+)\\\\*", "g"), "<em>$1</em>")
+              .replace(new RegExp("\\\\[([^\\\\]]+)\\\\]\\\\(([^)]+)\\\\)", "g"), '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+            }
+
+            function renderMarkdownPreview(markdown) {
+            const preview = document.getElementById("pr-preview");
+            if (!(preview instanceof HTMLElement)) {
+              return;
+            }
+
+            const codeFence = String.fromCharCode(96, 96, 96);
+            const escaped = escapePreviewHtml(markdown || "");
+            const lines = escaped.split(/\\r?\\n/);
+            const html = [];
+            let inList = false;
+            let listType = "ul";
+            let inCodeBlock = false;
+            let codeLines = [];
+
+            function closeList() {
+              if (inList) {
+                html.push(listType === "ol" ? "</ol>" : "</ul>");
+                inList = false;
+              }
+            }
+
+            function closeCodeBlock() {
+              if (inCodeBlock) {
+                html.push("<pre><code>" + codeLines.join("\\n") + "</code></pre>");
+                inCodeBlock = false;
+                codeLines = [];
+              }
+            }
+
+            for (const rawLine of lines) {
+              const line = rawLine.trimEnd();
+              const trimmed = line.trim();
+
+              if (trimmed.startsWith(codeFence)) {
+                closeList();
+                if (inCodeBlock) {
+                  closeCodeBlock();
+                } else {
+                  inCodeBlock = true;
+                  codeLines = [];
+                }
+                continue;
+              }
+
+              if (inCodeBlock) {
+                codeLines.push(line);
+                continue;
+              }
+
+              if (!trimmed) {
+                closeList();
+                html.push("");
+                continue;
+              }
+
+              const headingMatch = trimmed.match(/^(#{1,4})\\s+(.+)$/);
+              if (headingMatch) {
+                closeList();
+                const level = headingMatch[1].length;
+                html.push("<h" + level + ">" + renderInlineMarkdown(headingMatch[2]) + "</h" + level + ">");
+                continue;
+              }
+
+              if (/^---+$/.test(trimmed)) {
+                closeList();
+                html.push("<hr />");
+                continue;
+              }
+
+              const orderedMatch = trimmed.match(/^\\d+\\.\\s+(.+)$/);
+              const unorderedMatch = trimmed.match(/^[-*]\\s+(.+)$/);
+              if (orderedMatch || unorderedMatch) {
+                const nextListType = orderedMatch ? "ol" : "ul";
+                if (!inList || listType !== nextListType) {
+                  closeList();
+                  listType = nextListType;
+                  html.push(listType === "ol" ? "<ol>" : "<ul>");
+                  inList = true;
+                }
+
+                const listMatch = orderedMatch || unorderedMatch;
+                html.push("<li>" + renderInlineMarkdown(listMatch ? listMatch[1] : "") + "</li>");
+                continue;
+              }
+
+              closeList();
+
+              if (trimmed.startsWith("&gt;")) {
+                html.push("<blockquote>" + renderInlineMarkdown(trimmed.replace(/^&gt;\\s?/, "")) + "</blockquote>");
+                continue;
+              }
+
+              html.push("<p>" + renderInlineMarkdown(trimmed) + "</p>");
+            }
+
+            closeList();
+            closeCodeBlock();
+            preview.innerHTML = html.join("");
+            }
+
+            const bodyElement = document.getElementById("pr-body");
+            if (bodyElement instanceof HTMLTextAreaElement) {
+              renderMarkdownPreview(bodyElement.value);
+              bodyElement.addEventListener("input", () => {
+                renderMarkdownPreview(bodyElement.value);
+              });
+            }
+
+            const refreshButton = document.getElementById("pr-refresh-button");
+            if (refreshButton instanceof HTMLButtonElement) {
+              refreshButton.addEventListener("click", () => {
+                vscode.postMessage({ type: "refresh" });
+              });
+            }
+
+            const regenerateButton = document.getElementById("pr-regenerate-button");
+            if (regenerateButton instanceof HTMLButtonElement) {
+              regenerateButton.addEventListener("click", () => {
+                vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
+              });
+            }
+
+            const applyButton = document.getElementById("pr-apply-button");
+            if (applyButton instanceof HTMLButtonElement) {
+              applyButton.addEventListener("click", () => {
+                vscode.postMessage({ type: "prApply", ...readDraftState() });
+              });
+            }
+
+            document.addEventListener("click", (event) => {
+              const target = event.target;
+              if (!(target instanceof Element)) {
+                return;
+              }
+
+              const refreshElement = target.closest("[data-refresh]");
+              if (refreshElement) {
+                vscode.postMessage({ type: "refresh" });
+                return;
+              }
+
+              const regenerateElement = target.closest("[data-pr-regenerate]");
+              if (regenerateElement) {
+                vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
+                return;
+              }
+
+              const applyElement = target.closest("[data-pr-apply]");
+              if (applyElement) {
+                vscode.postMessage({ type: "prApply", ...readDraftState() });
+                return;
+              }
+
+              const fileRefElement = target.closest("[data-file-ref]");
+              const fileRef = fileRefElement ? fileRefElement.getAttribute("data-file-ref") : null;
+              if (fileRef) {
+                event.preventDefault();
+                vscode.postMessage({ type: "fileRef", fileRef });
+              }
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("[Code Explainer] PR description webview failed to boot", error);
+            setScriptStatus("Script error: " + message, "warn");
           }
-
-          document.addEventListener("click", (event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) {
-              return;
-            }
-
-            const refreshElement = target.closest("[data-refresh]");
-            if (refreshElement) {
-              vscode.postMessage({ type: "refresh" });
-              return;
-            }
-
-            const regenerateElement = target.closest("[data-pr-regenerate]");
-            if (regenerateElement) {
-              vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
-              return;
-            }
-
-            const applyElement = target.closest("[data-pr-apply]");
-            if (applyElement) {
-              vscode.postMessage({ type: "prApply", ...readDraftState() });
-              return;
-            }
-
-            const fileRefElement = target.closest("[data-file-ref]");
-            const fileRef = fileRefElement ? fileRefElement.getAttribute("data-file-ref") : null;
-            if (fileRef) {
-              event.preventDefault();
-              vscode.postMessage({ type: "fileRef", fileRef });
-            }
-          });
         </script>
       </body>
     </html>

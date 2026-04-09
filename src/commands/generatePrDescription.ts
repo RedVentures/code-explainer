@@ -30,10 +30,21 @@ export function createGeneratePrDescriptionCommand(
         onAction: () => undefined,
         onFileRef: (fileRef) => void openFileRef(fileRef),
         onRefresh: () => {
-          void runAnalysis();
+          void runAnalysis({
+            style: result.style,
+            customInstructions: result.customInstructions,
+          }).catch((error) => {
+            renderResult(result);
+            const message = error instanceof Error ? error.message : "Unknown error";
+            void vscode.window.showErrorMessage(`Code Explainer: ${message}`);
+          });
         },
         onMessage: (message) => {
-          void handlePanelMessage(message as DraftPanelMessage, result, renderResult);
+          void handlePanelMessage(message as DraftPanelMessage, result, renderResult).catch((error) => {
+            renderResult(restoreDraftResult(result, message as DraftPanelMessage));
+            const messageText = error instanceof Error ? error.message : "Unknown error";
+            void vscode.window.showErrorMessage(`Code Explainer: ${messageText}`);
+          });
         },
       });
     };
@@ -101,6 +112,67 @@ export function createGeneratePrDescriptionCommand(
       }
     };
 
-    await runAnalysis();
+    const initialStyle = await promptForInitialStyle();
+    if (!initialStyle) {
+      return;
+    }
+
+    await runAnalysis({ style: initialStyle });
   };
+}
+
+function restoreDraftResult(
+  result: PrDescriptionExplanation,
+  message: DraftPanelMessage
+): PrDescriptionExplanation {
+  if (message.type === "prRegenerate" || message.type === "prApply") {
+    return {
+      ...result,
+      draftTitle: message.title,
+      draftBody: message.body,
+      style: message.style,
+      customInstructions: message.customInstructions,
+    };
+  }
+
+  return result;
+}
+
+function promptForInitialStyle(): Thenable<PrDescriptionStyle | undefined> {
+  const items: Array<{
+    label: string;
+    description: string;
+    detail: string;
+    style: PrDescriptionStyle;
+  }> = [
+    {
+      label: "Business stakeholder",
+      description: "Outcome-focused language for partners and non-technical reviewers.",
+      detail: "Best when the PR description should emphasize impact, rollout, and risk.",
+      style: "business-stakeholder",
+    },
+    {
+      label: "Code collaborator",
+      description: "Technical but readable language for engineers reviewing the change.",
+      detail: "Best when teammates need implementation context without reading the whole diff.",
+      style: "code-collaborator",
+    },
+    {
+      label: "Manager",
+      description: "High-level explanation of what changed and why it matters.",
+      detail: "Best default for lightweight status updates and stakeholder visibility.",
+      style: "manager",
+    },
+    {
+      label: "Other",
+      description: "Start from a flexible base and refine with custom instructions.",
+      detail: "Best when the audience is unusual or the tone needs to be highly customized.",
+      style: "other",
+    },
+  ];
+
+  return vscode.window.showQuickPick(items, {
+    title: "Choose a PR description style",
+    placeHolder: "Pick the audience/tone before generating the first draft.",
+  }).then((selection) => selection?.style);
 }

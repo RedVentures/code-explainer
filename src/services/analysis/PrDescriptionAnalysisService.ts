@@ -69,6 +69,10 @@ export class PrDescriptionAnalysisService {
 
     const hasRemoteBranch = await git.hasRemoteBranch(repository.remoteName, branchName);
     const existingPr = await this.githubService.findOpenPullRequest(repository, branchName, true);
+    const latestKnownPr = existingPr ?? await this.githubService.findPullRequest(repository, branchName, {
+      state: "all",
+      createIfNone: false,
+    });
     const prState = this.getPrState(existingPr);
     const existingBody = existingPr?.body ?? "";
     const hasManagedBlock = this.hasManagedBlock(existingBody);
@@ -117,8 +121,8 @@ export class PrDescriptionAnalysisService {
       baseBranch,
       prState,
       hasRemoteBranch,
-      existingPrNumber: existingPr?.number,
-      existingPrUrl: existingPr?.url,
+      existingPrNumber: latestKnownPr?.number,
+      existingPrUrl: latestKnownPr?.url,
       defaultGuidelines,
       defaultTemplate,
     };
@@ -138,6 +142,23 @@ export class PrDescriptionAnalysisService {
     const hasRemoteBranch = await git.hasRemoteBranch(repository.remoteName, branchName);
 
     if (!existingPr) {
+      const latestKnownPr = await this.githubService.findPullRequest(repository, branchName, {
+        state: "all",
+        createIfNone: false,
+      });
+
+      if (latestKnownPr?.merged) {
+        throw new Error(
+          `Pull request #${latestKnownPr.number} for this branch was already merged into ${options.draft.baseBranch}. Make new commits or use a new branch before applying again.`
+        );
+      }
+
+      if (latestKnownPr?.state === "closed") {
+        throw new Error(
+          `Pull request #${latestKnownPr.number} for this branch is closed. Reopen it or make new commits before applying again.`
+        );
+      }
+
       if (!hasRemoteBranch) {
         const publish = await this.confirmAction(
           "This branch is only local. Publish it to GitHub and continue?",
@@ -290,6 +311,14 @@ export class PrDescriptionAnalysisService {
   ): string {
     switch (prState) {
       case "no-pr":
+        if (existingPr?.merged) {
+          return `Pull request #${existingPr.number} for this branch was already merged. Generate a new branch or add new commits before creating another PR.`;
+        }
+
+        if (existingPr?.state === "closed") {
+          return `Pull request #${existingPr.number} for this branch is closed. Reopen it or add new commits before creating another PR.`;
+        }
+
         return "No open pull request was found for the current branch. Applying this draft will create one.";
       case "existing-empty":
         return existingPr
