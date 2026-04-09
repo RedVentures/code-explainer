@@ -13,6 +13,8 @@ export type GitHubPullRequest = {
   title: string;
   body: string;
   url: string;
+  state: "open" | "closed";
+  merged: boolean;
 };
 
 type GitHubPullRequestResponse = {
@@ -20,6 +22,8 @@ type GitHubPullRequestResponse = {
   title: string;
   body: string | null;
   html_url: string;
+  state: "open" | "closed";
+  merged_at: string | null;
 };
 
 export class GitHubService {
@@ -45,12 +49,23 @@ export class GitHubService {
     branchName: string,
     createIfNone = true
   ): Promise<GitHubPullRequest | undefined> {
+    return this.findPullRequest(repo, branchName, { state: "open", createIfNone });
+  }
+
+  public async findPullRequest(
+    repo: GitHubRepository,
+    branchName: string,
+    options: {
+      state?: "open" | "closed" | "all";
+      createIfNone?: boolean;
+    } = {}
+  ): Promise<GitHubPullRequest | undefined> {
     const pulls = await this.request<GitHubPullRequestResponse[]>(
-      `/repos/${repo.owner}/${repo.name}/pulls?state=open&head=${encodeURIComponent(`${repo.owner}:${branchName}`)}&per_page=1`,
+      `/repos/${repo.owner}/${repo.name}/pulls?state=${options.state ?? "open"}&head=${encodeURIComponent(`${repo.owner}:${branchName}`)}&per_page=1&sort=updated&direction=desc`,
       {
         method: "GET",
       },
-      createIfNone
+      options.createIfNone ?? true
     );
 
     const pull = pulls[0];
@@ -179,6 +194,8 @@ export class GitHubService {
       title: pull.title,
       body: pull.body ?? "",
       url: pull.html_url,
+      state: pull.state,
+      merged: Boolean(pull.merged_at),
     };
   }
 }

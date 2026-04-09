@@ -884,6 +884,12 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             padding: 18px;
             margin-bottom: 18px;
           }
+          .draft-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+            gap: 18px;
+            align-items: start;
+          }
           .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -920,76 +926,61 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           textarea#pr-body {
             min-height: 360px;
           }
-          .draft-layout {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-            align-items: start;
-            margin-top: 16px;
-          }
-          .preview {
+          .preview-panel {
             border: 1px solid var(--border);
             border-radius: 12px;
-            background: rgba(21, 36, 60, 0.85);
-            padding: 16px;
+            background: rgba(21, 36, 60, 0.55);
+            padding: 14px;
             min-height: 360px;
           }
-          .preview > :first-child {
-            margin-top: 0;
-          }
-          .preview h1,
-          .preview h2,
-          .preview h3,
-          .preview h4 {
-            margin: 18px 0 10px;
-            line-height: 1.25;
-          }
-          .preview h1 { font-size: 22px; }
-          .preview h2 { font-size: 18px; }
-          .preview h3 { font-size: 15px; }
-          .preview p,
-          .preview ul,
-          .preview ol,
-          .preview blockquote {
+          .preview-panel h3 {
             margin: 0 0 12px;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
           }
-          .preview ul,
-          .preview ol {
-            padding-left: 20px;
+          .preview-body {
+            display: grid;
+            gap: 12px;
+            color: var(--text);
           }
-          .preview li + li {
-            margin-top: 4px;
+          .preview-body:empty::before {
+            content: "Live markdown preview will appear here.";
+            color: var(--muted);
           }
-          .preview code {
-            background: rgba(125, 211, 252, 0.12);
-            border-radius: 6px;
-            padding: 1px 5px;
-            font-size: 0.95em;
+          .preview-body p,
+          .preview-body ul,
+          .preview-body ol,
+          .preview-body blockquote,
+          .preview-body pre,
+          .preview-body hr {
+            margin: 0;
           }
-          .preview pre {
-            background: rgba(7, 17, 31, 0.9);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 14px;
-            overflow: auto;
-            margin: 0 0 12px;
+          .preview-body ul,
+          .preview-body ol {
+            padding-left: 18px;
           }
-          .preview pre code {
-            background: transparent;
-            padding: 0;
-          }
-          .preview hr {
-            border: 0;
-            border-top: 1px solid var(--border);
-            margin: 18px 0;
-          }
-          .preview blockquote {
-            border-left: 3px solid rgba(125, 211, 252, 0.35);
+          .preview-body blockquote {
+            border-left: 3px solid var(--border);
             padding-left: 12px;
-            color: #c6d5ef;
+            color: var(--muted);
           }
-          .preview strong {
-            color: #ffffff;
+          .preview-body code {
+            font: inherit;
+            padding: 1px 5px;
+            border-radius: 6px;
+            background: rgba(125, 211, 252, 0.12);
+          }
+          .preview-body pre {
+            padding: 12px;
+            border-radius: 10px;
+            background: rgba(7, 17, 31, 0.8);
+            overflow-x: auto;
+          }
+          .preview-body pre code {
+            padding: 0;
+            background: transparent;
           }
           .hint {
             margin-top: 8px;
@@ -1029,6 +1020,11 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           a {
             color: var(--accent);
           }
+          @media (max-width: 900px) {
+            .draft-layout {
+              grid-template-columns: 1fr;
+            }
+          }
         </style>
       </head>
       <body>
@@ -1046,6 +1042,7 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           <button type="button" class="action" id="pr-refresh-button" data-refresh="true">Refresh from Branch</button>
           <button type="button" class="action" id="pr-regenerate-button" data-pr-regenerate="true">Regenerate</button>
           <button type="button" class="action primary" id="pr-apply-button" data-pr-apply="true">Apply to GitHub</button>
+          <span class="badge" id="pr-script-status">Script pending</span>
         </div>
         <section class="editor">
           <div class="grid">
@@ -1067,20 +1064,33 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             <textarea id="pr-custom-instructions" placeholder="Add one-off guidance for this PR draft.">${escapeHtml(result.customInstructions)}</textarea>
           </label>
           <div class="hint">Panel instructions override saved defaults when you regenerate.</div>
-          <div class="draft-layout">
+          <div class="draft-layout" style="margin-top:16px;">
             <label class="field">
               <span class="field-label">PR Description Draft</span>
               <textarea id="pr-body">${escapeHtml(result.draftBody)}</textarea>
             </label>
-            <div class="field">
-              <span class="field-label">Markdown Preview</span>
-              <div class="preview" id="pr-preview">${initialPreviewHtml}</div>
-            </div>
+            <section class="preview-panel">
+              <h3>Markdown Preview</h3>
+              <div class="preview-body" id="pr-preview">${initialPreviewHtml}</div>
+            </section>
           </div>
         </section>
         ${renderCards(result)}
         <script>
           const vscode = acquireVsCodeApi();
+          const scriptStatus = document.getElementById("pr-script-status");
+
+          function setScriptStatus(text, state) {
+            if (!(scriptStatus instanceof HTMLElement)) {
+              return;
+            }
+
+            scriptStatus.textContent = text;
+            scriptStatus.classList.remove("success", "warn");
+            if (state) {
+              scriptStatus.classList.add(state);
+            }
+          }
 
           function readDraftState() {
             const title = document.getElementById("pr-title");
@@ -1104,11 +1114,12 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           }
 
           function renderInlineMarkdown(text) {
+            const backtick = String.fromCharCode(96);
             return text
-              .replace(/\`([^\`]+)\`/g, "<code>$1</code>")
-              .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-              .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-              .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+              .replace(new RegExp(backtick + "([^" + backtick + "]+)" + backtick, "g"), "<code>$1</code>")
+              .replace(new RegExp("\\*\\*([^*]+)\\*\\*", "g"), "<strong>$1</strong>")
+              .replace(new RegExp("\\*([^*]+)\\*", "g"), "<em>$1</em>")
+              .replace(new RegExp("\\[([^\\]]+)\\]\\(([^)]+)\\)", "g"), '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
           }
 
           function renderMarkdownPreview(markdown) {
@@ -1117,6 +1128,7 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               return;
             }
 
+            const codeFence = String.fromCharCode(96, 96, 96);
             const escaped = escapePreviewHtml(markdown || "");
             const lines = escaped.split(/\\r?\\n/);
             const html = [];
@@ -1144,7 +1156,7 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               const line = rawLine.trimEnd();
               const trimmed = line.trim();
 
-              if (trimmed.startsWith("\`\`\`")) {
+              if (trimmed.startsWith(codeFence)) {
                 closeList();
                 if (inCodeBlock) {
                   closeCodeBlock();
@@ -1210,56 +1222,59 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             preview.innerHTML = html.join("");
           }
 
-          const bodyElement = document.getElementById("pr-body");
-          if (bodyElement instanceof HTMLTextAreaElement) {
-            renderMarkdownPreview(bodyElement.value);
-            bodyElement.addEventListener("input", () => {
-              renderMarkdownPreview(bodyElement.value);
-            });
+          function postRefresh() {
+            vscode.postMessage({ type: "refresh" });
+          }
+
+          function postRegenerate() {
+            vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
+          }
+
+          function postApply() {
+            vscode.postMessage({ type: "prApply", ...readDraftState() });
           }
 
           const refreshButton = document.getElementById("pr-refresh-button");
           if (refreshButton instanceof HTMLButtonElement) {
             refreshButton.addEventListener("click", () => {
-              vscode.postMessage({ type: "refresh" });
+              postRefresh();
             });
           }
 
           const regenerateButton = document.getElementById("pr-regenerate-button");
           if (regenerateButton instanceof HTMLButtonElement) {
             regenerateButton.addEventListener("click", () => {
-              vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
+              postRegenerate();
             });
           }
 
           const applyButton = document.getElementById("pr-apply-button");
           if (applyButton instanceof HTMLButtonElement) {
             applyButton.addEventListener("click", () => {
-              vscode.postMessage({ type: "prApply", ...readDraftState() });
+              postApply();
+            });
+          }
+
+          const bodyElement = document.getElementById("pr-body");
+          if (bodyElement instanceof HTMLTextAreaElement) {
+            try {
+              renderMarkdownPreview(bodyElement.value);
+            } catch (error) {
+              console.error("[Code Explainer] Initial preview render failed", error);
+            }
+
+            bodyElement.addEventListener("input", () => {
+              try {
+                renderMarkdownPreview(bodyElement.value);
+              } catch (error) {
+                console.error("[Code Explainer] Live preview render failed", error);
+              }
             });
           }
 
           document.addEventListener("click", (event) => {
             const target = event.target;
             if (!(target instanceof Element)) {
-              return;
-            }
-
-            const refreshElement = target.closest("[data-refresh]");
-            if (refreshElement) {
-              vscode.postMessage({ type: "refresh" });
-              return;
-            }
-
-            const regenerateElement = target.closest("[data-pr-regenerate]");
-            if (regenerateElement) {
-              vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
-              return;
-            }
-
-            const applyElement = target.closest("[data-pr-apply]");
-            if (applyElement) {
-              vscode.postMessage({ type: "prApply", ...readDraftState() });
               return;
             }
 
@@ -1270,6 +1285,8 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               vscode.postMessage({ type: "fileRef", fileRef });
             }
           });
+
+          setScriptStatus("Script ready", "success");
         </script>
       </body>
     </html>

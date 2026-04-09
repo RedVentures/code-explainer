@@ -38,10 +38,18 @@ export function createGeneratePrDescriptionCommand(
           void runAnalysis({
             style: result.style,
             customInstructions: result.customInstructions,
+          }).catch((error) => {
+            renderResult(result);
+            const message = error instanceof Error ? error.message : "Unknown error";
+            void vscode.window.showErrorMessage(`Code Explainer: ${message}`);
           });
         },
         onMessage: (message) => {
-          void handlePanelMessage(message as DraftPanelMessage, result, renderResult);
+          void handlePanelMessage(message as DraftPanelMessage, result, renderResult).catch((error) => {
+            renderResult(restoreDraftResult(result, message as DraftPanelMessage));
+            const messageText = error instanceof Error ? error.message : "Unknown error";
+            void vscode.window.showErrorMessage(`Code Explainer: ${messageText}`);
+          });
         },
       });
     };
@@ -122,17 +130,33 @@ export function createGeneratePrDescriptionCommand(
   };
 }
 
-async function promptForInitialStyle(styles: PrDescriptionStyleOption[]): Promise<PrDescriptionStyle | undefined> {
+function restoreDraftResult(
+  result: PrDescriptionExplanation,
+  message: DraftPanelMessage
+): PrDescriptionExplanation {
+  if (message.type === "prRegenerate" || message.type === "prApply") {
+    return {
+      ...result,
+      draftTitle: message.title,
+      draftBody: message.body,
+      style: message.style,
+      customInstructions: message.customInstructions,
+    };
+  }
+
+  return result;
+}
+
+function promptForInitialStyle(styles: PrDescriptionStyleOption[]): Thenable<PrDescriptionStyle | undefined> {
   const items = styles.map((style) => ({
     label: style.label,
     description: style.description,
     detail: style.isBuiltIn ? "Built-in style" : "Custom reusable style",
     style: style.id,
   }));
-  const selection = await vscode.window.showQuickPick(items, {
+
+  return vscode.window.showQuickPick(items, {
     title: "Choose a PR description style",
     placeHolder: "Pick the audience/tone before generating the first draft.",
-  });
-
-  return selection?.style;
+  }).then((selection) => selection?.style);
 }
