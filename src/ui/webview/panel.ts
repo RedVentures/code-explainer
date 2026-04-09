@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { AnalysisResult } from "../../models/types";
+import { AnalysisResult, CachedResultSource } from "../../models/types";
 import { renderHtml, renderLoadingHtml } from "./render";
 
 export class ResultsPanel {
@@ -9,6 +9,7 @@ export class ResultsPanel {
   private onRefresh: (() => void) | undefined;
   private onMessage: ((message: unknown) => void) | undefined;
   private currentResult: AnalysisResult | undefined;
+  private currentSource: CachedResultSource | undefined;
 
   public constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -19,10 +20,12 @@ export class ResultsPanel {
       onFileRef: (fileRef: string) => void;
       onRefresh: () => void;
       onMessage?: (message: unknown) => void;
-    }
+    },
+    source?: CachedResultSource
   ): void {
     const panel = this.ensurePanel();
     this.currentResult = result;
+    this.currentSource = source;
     this.onAction = handlers.onAction;
     this.onFileRef = handlers.onFileRef;
     this.onRefresh = handlers.onRefresh;
@@ -35,6 +38,10 @@ export class ResultsPanel {
 
   public getCurrentResult(): AnalysisResult | undefined {
     return this.currentResult;
+  }
+
+  public getCurrentSource(): CachedResultSource | undefined {
+    return this.currentSource;
   }
 
   public showLoading(title: string, message: string): void {

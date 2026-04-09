@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { createCompareBranchCommand } from "./commands/compareBranch";
 import { createCompareFileWithBranchCommand } from "./commands/compareFileWithBranch";
 import { createDrawFlowChartCommand } from "./commands/drawFlowChart";
+import { createExplainDirectoryCommand } from "./commands/explainDirectory";
 import { createExplainRepoCommand } from "./commands/explainRepo";
 import { createExplainSelectionCommand } from "./commands/explainSelection";
 import { createGeneratePrDescriptionCommand } from "./commands/generatePrDescription";
@@ -9,6 +10,7 @@ import { handlePanelAction, openFileRef } from "./commands/shared";
 import { createTraceRelationshipsCommand } from "./commands/traceRelationships";
 import { CachedResultEntry } from "./models/types";
 import { BranchAnalysisService } from "./services/analysis/BranchAnalysisService";
+import { DirectoryAnalysisService } from "./services/analysis/DirectoryAnalysisService";
 import { FlowAnalysisService } from "./services/analysis/FlowAnalysisService";
 import { PrDescriptionAnalysisService } from "./services/analysis/PrDescriptionAnalysisService";
 import { RepoAnalysisService } from "./services/analysis/RepoAnalysisService";
@@ -29,6 +31,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const githubService = new GitHubService();
   const promptBuilder = new PromptBuilder();
   const repoAnalysis = new RepoAnalysisService(repoScanner, promptBuilder);
+  const directoryAnalysis = new DirectoryAnalysisService(repoScanner, promptBuilder);
   const branchAnalysis = new BranchAnalysisService(repoScanner, promptBuilder);
   const flowAnalysis = new FlowAnalysisService(repoScanner, promptBuilder);
   const prDescriptionAnalysis = new PrDescriptionAnalysisService(repoScanner, promptBuilder, githubService);
@@ -42,6 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const cacheService = new CacheService(context.workspaceState);
   const sidebarProvider = new CodeExplainerProvider(cacheService);
   const explainRepo = createExplainRepoCommand(panel, repoAnalysis, cacheService, sidebarProvider);
+  const explainDirectory = createExplainDirectoryCommand(panel, directoryAnalysis, cacheService, sidebarProvider);
   const explainSelection = createExplainSelectionCommand(panel, selectionAnalysis, cacheService, sidebarProvider);
   const compareBranch = createCompareBranchCommand(panel, branchAnalysis, cacheService, sidebarProvider);
   const compareFileWithBranch = createCompareFileWithBranchCommand(panel, branchAnalysis, cacheService, sidebarProvider);
@@ -58,6 +62,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider("codeExplainer.sidebar", sidebarProvider),
     vscode.commands.registerCommand("codeExplainer.refreshSidebar", () => sidebarProvider.refresh()),
     vscode.commands.registerCommand("codeExplainer.explainRepo", wrapCommand(explainRepo)),
+    vscode.commands.registerCommand("codeExplainer.explainDirectory", wrapCommand(explainDirectory)),
     vscode.commands.registerCommand("codeExplainer.explainSelection", wrapCommand(explainSelection)),
     vscode.commands.registerCommand("codeExplainer.compareBranch", wrapCommand(compareBranch)),
     vscode.commands.registerCommand("codeExplainer.compareFileWithBranch", wrapCommand(compareFileWithBranch)),
@@ -79,6 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
             void refreshCachedEntry(
               entry,
               explainRepo,
+              explainDirectory,
               explainSelection,
               compareBranch,
               drawFlowChart,
@@ -106,12 +112,14 @@ function wrapCommand<T extends unknown[]>(command: (...args: T) => Promise<void>
 async function refreshCachedEntry(
   entry: CachedResultEntry,
   explainRepo: (forceRefresh?: boolean) => Promise<void>,
+  explainDirectory: (uri?: vscode.Uri, forceRefresh?: boolean) => Promise<void>,
   explainSelection: (
     forceRefresh?: boolean,
     target?: { filePath: string; startLine: number; endLine: number }
   ) => Promise<void>,
   compareBranch: (forceRefresh?: boolean) => Promise<void>,
   drawFlowChart: (
+    directoryPath?: string,
     forceRefresh?: boolean
   ) => Promise<void>,
   traceRelationships: (
@@ -123,6 +131,9 @@ async function refreshCachedEntry(
     case "repo":
       await explainRepo(true);
       return;
+    case "directory":
+      await explainDirectory(vscode.Uri.file(entry.source.directoryPath), true);
+      return;
     case "branch":
       await compareBranch(true);
       return;
@@ -130,7 +141,7 @@ async function refreshCachedEntry(
       await explainSelection(true, entry.source);
       return;
     case "flow":
-      await drawFlowChart(true);
+      await drawFlowChart(entry.source.directoryPath, true);
       return;
     case "trace":
       await traceRelationships(true, entry.source);

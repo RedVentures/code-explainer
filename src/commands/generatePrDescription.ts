@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { PrDescriptionExplanation, PrDescriptionStyle } from "../models/types";
-import { PrDescriptionAnalysisService } from "../services/analysis/PrDescriptionAnalysisService";
+import { PrDescriptionExplanation, PrDescriptionStyle, PrDescriptionStyleOption } from "../models/types";
+import { NoBranchChangesError, PrDescriptionAnalysisService } from "../services/analysis/PrDescriptionAnalysisService";
 import { ResultsPanel } from "../ui/webview/panel";
 import { openFileRef } from "./shared";
 
@@ -25,6 +25,11 @@ export function createGeneratePrDescriptionCommand(
   analysisService: PrDescriptionAnalysisService
 ) {
   return async () => {
+    const initialStyle = await promptForInitialStyle(analysisService.getAvailableStyles());
+    if (!initialStyle) {
+      return;
+    }
+
     const renderResult = (result: PrDescriptionExplanation) => {
       panel.show(result, {
         onAction: () => undefined,
@@ -51,8 +56,17 @@ export function createGeneratePrDescriptionCommand(
 
     const runAnalysis = async (options?: { style?: PrDescriptionStyle; customInstructions?: string }) => {
       panel.showLoading("Generate PR Description", "Reviewing the current branch and preparing a PR description draft.");
-      const result = await analysisService.analyze(options);
-      renderResult(result);
+      try {
+        const result = await analysisService.analyze(options);
+        renderResult(result);
+      } catch (error) {
+        if (error instanceof NoBranchChangesError) {
+          void vscode.window.showInformationMessage(error.message);
+          return;
+        }
+
+        throw error;
+      }
     };
 
     const handlePanelMessage = async (

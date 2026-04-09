@@ -8,6 +8,16 @@ import { ResultsPanel } from "../ui/webview/panel";
 export async function handlePanelAction(action: string, panel?: ResultsPanel): Promise<void> {
   const normalized = action.toLowerCase();
 
+  if (normalized.includes("directory") && normalized.includes("diagram")) {
+    // Draw diagram for the current directory
+    const currentSource = panel?.getCurrentSource();
+    if (currentSource?.kind === "directory") {
+      await vscode.commands.executeCommand("codeExplainer.drawFlowChart", currentSource.directoryPath);
+      return;
+    }
+    return;
+  }
+
   if (normalized.includes("branch")) {
     // If we're in a selection context, compare only that file
     const currentResult = panel?.getCurrentResult();
@@ -71,13 +81,13 @@ export async function showCachedOrFresh(options: {
   loadingMessage: string;
   forceRefresh?: boolean;
   getFresh: () => Promise<AnalysisResult>;
-  render: (result: AnalysisResult, refresh: () => void) => void;
+  render: (result: AnalysisResult, refresh: () => void, source: CachedResultSource) => void;
 }): Promise<void> {
   const cached = options.cache.get(options.cacheKey);
   if (cached && !options.forceRefresh) {
     options.render(cached.result, () => {
       void showCachedOrFresh({ ...options, forceRefresh: true });
-    });
+    }, cached.source);
     return;
   }
 
@@ -102,5 +112,5 @@ export async function showCachedOrFresh(options: {
   options.sidebarProvider.refresh();
   options.render(result, () => {
     void showCachedOrFresh({ ...options, forceRefresh: true });
-  });
+  }, options.source);
 }

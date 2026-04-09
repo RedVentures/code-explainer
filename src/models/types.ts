@@ -1,6 +1,16 @@
 export type ProviderName = "openai" | "anthropic";
-export type PrDescriptionStyle = "business-stakeholder" | "code-collaborator" | "manager" | "other";
+export type PrDescriptionStyle = string;
 export type PrState = "no-pr" | "existing-empty" | "existing-with-description";
+
+export type PrDescriptionStyleOption = {
+  id: PrDescriptionStyle;
+  label: string;
+  description: string;
+  prompt?: string;
+  template?: string;
+  guidelines?: string;
+  isBuiltIn?: boolean;
+};
 
 export type FileRef = {
   path: string;
@@ -99,6 +109,8 @@ export type PrDescriptionExplanation = {
   draftTitle: string;
   draftBody: string;
   style: PrDescriptionStyle;
+  styleLabel: string;
+  availableStyles: PrDescriptionStyleOption[];
   customInstructions: string;
   branchName: string;
   baseBranch: string;
@@ -165,10 +177,11 @@ export type SelectionTarget = {
 
 export type CachedResultSource =
   | { kind: "repo" }
+  | { kind: "directory"; directoryPath: string }
   | { kind: "branch"; baseBranch: string }
   | ({ kind: "selection" } & SelectionTarget)
   | ({ kind: "trace" } & SelectionTarget)
-  | { kind: "flow"; branchName: string };
+  | { kind: "flow"; branchName: string; directoryPath?: string };
 
 export type CachedResultEntry = {
   key: string;
