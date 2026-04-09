@@ -1,4 +1,4 @@
-import { BranchContext, PromptInput, RepoContext, SelectionContext } from "../../models/types";
+import { BranchContext, PrDescriptionStyle, PromptInput, RepoContext, SelectionContext } from "../../models/types";
 
 const sharedSystem = [
   "You are an expert software engineer helping a developer understand code.",
@@ -121,5 +121,56 @@ export class PromptBuilder {
         `Sample file list:\n${context.repo.files.join("\n") || "(none)"}`,
       ].join("\n\n"),
     };
+  }
+
+  public buildPrDescriptionPrompt(context: {
+    branchName: string;
+    baseBranch: string;
+    changedFiles: string[];
+    diff: string;
+    existingTitle?: string;
+    existingBody?: string;
+    style: PrDescriptionStyle;
+    customInstructions?: string;
+    teamGuidelines?: string;
+    template?: string;
+  }): PromptInput {
+    return {
+      system: [
+        "You write polished GitHub pull request titles and PR summary sections.",
+        "Return valid JSON only. No markdown fences. No prose outside the JSON object.",
+        'Use this schema: {"title": string, "generatedBody": string}.',
+        "The generatedBody will be inserted into a managed section inside the full PR description, so do not mention markers, automation, or implementation notes about the tool itself.",
+        "Default shape: a short executive summary followed by clear markdown sections.",
+        "Be accurate to the supplied diff. If something is inferred, say so carefully.",
+        "Keep the language readable and specific rather than generic release-note filler.",
+      ].join(" "),
+      user: [
+        "Generate a PR title and PR description section for the current branch.",
+        `Audience/style: ${this.getPrStyleGuidance(context.style)}`,
+        `Current branch: ${context.branchName}`,
+        `Base branch: ${context.baseBranch}`,
+        `Changed files:\n${context.changedFiles.join("\n") || "(none)"}`,
+        `Diff excerpt:\n${context.diff || "(no diff available)"}`,
+        `Existing PR title:\n${context.existingTitle?.trim() || "(none)"}`,
+        `Existing PR body:\n${context.existingBody?.trim() || "(none)"}`,
+        `Team guidelines:\n${context.teamGuidelines?.trim() || "(none)"}`,
+        `Preferred template:\n${context.template?.trim() || "(none)"}`,
+        `Custom run instructions:\n${context.customInstructions?.trim() || "(none)"}`,
+      ].join("\n\n"),
+    };
+  }
+
+  private getPrStyleGuidance(style: PrDescriptionStyle): string {
+    switch (style) {
+      case "business-stakeholder":
+        return "Business stakeholder: non-technical, impact-focused, concise, and outcome-oriented.";
+      case "code-collaborator":
+        return "Code collaborator: technical, implementation-aware, explicit about architecture, risks, and testing.";
+      case "manager":
+        return "Manager: semi-technical, balancing delivery impact with enough implementation detail to understand scope and risk.";
+      case "other":
+        return "Other: use the custom instructions as the primary guide and keep the tone professional.";
+    }
   }
 }

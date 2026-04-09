@@ -4,13 +4,16 @@ import { createCompareFileWithBranchCommand } from "./commands/compareFileWithBr
 import { createDrawFlowChartCommand } from "./commands/drawFlowChart";
 import { createExplainRepoCommand } from "./commands/explainRepo";
 import { createExplainSelectionCommand } from "./commands/explainSelection";
+import { createGeneratePrDescriptionCommand } from "./commands/generatePrDescription";
 import { handlePanelAction, openFileRef } from "./commands/shared";
 import { createTraceRelationshipsCommand } from "./commands/traceRelationships";
 import { CachedResultEntry } from "./models/types";
 import { BranchAnalysisService } from "./services/analysis/BranchAnalysisService";
 import { FlowAnalysisService } from "./services/analysis/FlowAnalysisService";
+import { PrDescriptionAnalysisService } from "./services/analysis/PrDescriptionAnalysisService";
 import { RepoAnalysisService } from "./services/analysis/RepoAnalysisService";
 import { SelectionAnalysisService } from "./services/analysis/SelectionAnalysisService";
+import { GitHubService } from "./services/github/GitHubService";
 import { PromptBuilder } from "./services/llm/PromptBuilder";
 import { RelationshipService } from "./services/repo/RelationshipService";
 import { RepoScanner } from "./services/repo/RepoScanner";
@@ -23,10 +26,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const repoScanner = new RepoScanner();
   const symbolService = new SymbolService();
   const relationshipService = new RelationshipService(symbolService);
+  const githubService = new GitHubService();
   const promptBuilder = new PromptBuilder();
   const repoAnalysis = new RepoAnalysisService(repoScanner, promptBuilder);
   const branchAnalysis = new BranchAnalysisService(repoScanner, promptBuilder);
   const flowAnalysis = new FlowAnalysisService(repoScanner, promptBuilder);
+  const prDescriptionAnalysis = new PrDescriptionAnalysisService(repoScanner, promptBuilder, githubService);
   const selectionAnalysis = new SelectionAnalysisService(
     repoScanner,
     symbolService,
@@ -41,6 +46,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const compareBranch = createCompareBranchCommand(panel, branchAnalysis, cacheService, sidebarProvider);
   const compareFileWithBranch = createCompareFileWithBranchCommand(panel, branchAnalysis, cacheService, sidebarProvider);
   const drawFlowChart = createDrawFlowChartCommand(panel, flowAnalysis, cacheService, sidebarProvider);
+  const generatePrDescription = createGeneratePrDescriptionCommand(panel, prDescriptionAnalysis);
   const traceRelationships = createTraceRelationshipsCommand(
     panel,
     selectionAnalysis,
@@ -56,6 +62,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("codeExplainer.compareBranch", wrapCommand(compareBranch)),
     vscode.commands.registerCommand("codeExplainer.compareFileWithBranch", wrapCommand(compareFileWithBranch)),
     vscode.commands.registerCommand("codeExplainer.drawFlowChart", wrapCommand(drawFlowChart)),
+    vscode.commands.registerCommand("codeExplainer.generatePrDescription", wrapCommand(generatePrDescription)),
     vscode.commands.registerCommand("codeExplainer.traceRelationships", wrapCommand(traceRelationships)),
     vscode.commands.registerCommand(
       "codeExplainer.openCachedResult",

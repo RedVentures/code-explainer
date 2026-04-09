@@ -8,6 +8,7 @@ Code Explainer is a VS Code extension scaffold for branch-aware code comprehensi
 - Compare the current branch with `main`
 - Explain the current selection with surrounding context
 - Trace relationships between files, symbols, tests, and configuration
+- Generate a reviewable GitHub PR title and description for the current branch
 
 ## Development
 
