@@ -1,4 +1,6 @@
 export type ProviderName = "openai" | "anthropic";
+export type PrDescriptionStyle = "business-stakeholder" | "code-collaborator" | "manager" | "other";
+export type PrState = "no-pr" | "existing-empty" | "existing-with-description";
 
 export type FileRef = {
   path: string;
@@ -90,12 +92,31 @@ export type FlowExplanation = {
   flowChart: FlowChart;
 };
 
+export type PrDescriptionExplanation = {
+  kind: "prDescription";
+  headline: string;
+  cards: ExplanationCard[];
+  draftTitle: string;
+  draftBody: string;
+  style: PrDescriptionStyle;
+  customInstructions: string;
+  branchName: string;
+  baseBranch: string;
+  prState: PrState;
+  hasRemoteBranch: boolean;
+  existingPrNumber?: number;
+  existingPrUrl?: string;
+  defaultGuidelines?: string;
+  defaultTemplate?: string;
+};
+
 export type AnalysisResult =
   | RepoSummary
   | BranchSummary
   | SelectionExplanation
   | TraceExplanation
-  | FlowExplanation;
+  | FlowExplanation
+  | PrDescriptionExplanation;
 
 export type RepoContext = {
   workspaceName: string;

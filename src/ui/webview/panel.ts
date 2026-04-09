@@ -7,6 +7,7 @@ export class ResultsPanel {
   private onAction: ((action: string) => void) | undefined;
   private onFileRef: ((fileRef: string) => void) | undefined;
   private onRefresh: (() => void) | undefined;
+  private onMessage: ((message: unknown) => void) | undefined;
   private currentResult: AnalysisResult | undefined;
 
   public constructor(private readonly extensionUri: vscode.Uri) {}
@@ -17,6 +18,7 @@ export class ResultsPanel {
       onAction: (action: string) => void;
       onFileRef: (fileRef: string) => void;
       onRefresh: () => void;
+      onMessage?: (message: unknown) => void;
     }
   ): void {
     const panel = this.ensurePanel();
@@ -24,6 +26,7 @@ export class ResultsPanel {
     this.onAction = handlers.onAction;
     this.onFileRef = handlers.onFileRef;
     this.onRefresh = handlers.onRefresh;
+    this.onMessage = handlers.onMessage;
 
     panel.title = `Code Explainer: ${result.kind}`;
     panel.webview.html = renderHtml("Code Explainer", result);
@@ -61,6 +64,7 @@ export class ResultsPanel {
       this.onAction = undefined;
       this.onFileRef = undefined;
       this.onRefresh = undefined;
+      this.onMessage = undefined;
     });
 
     this.panel.webview.onDidReceiveMessage((message: { type?: string; action?: string; fileRef?: string }) => {
@@ -73,7 +77,10 @@ export class ResultsPanel {
       }
       if (message.type === "fileRef" && message.fileRef) {
         this.onFileRef?.(message.fileRef);
+        return;
       }
+
+      this.onMessage?.(message);
     });
 
     return this.panel;

@@ -64,6 +64,11 @@ export class CodeExplainerProvider implements vscode.TreeDataProvider<SidebarNod
           label: "Draw Branch Diagram",
           command: { command: "codeExplainer.drawFlowChart", title: "Draw Branch Diagram" },
         },
+        {
+          id: "pr-description",
+          label: "Generate PR Description",
+          command: { command: "codeExplainer.generatePrDescription", title: "Generate PR Description" },
+        },
       ];
 
       const cachedItems = this.cacheService.list();
