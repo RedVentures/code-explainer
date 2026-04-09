@@ -7,7 +7,7 @@ import {
   PrDescriptionStyle,
   PrState,
 } from "../../models/types";
-import { GitHubPullRequest, GitHubRepository, GitHubService } from "../github/GitHubService";
+import { GitHubPullRequest, GitHubService } from "../github/GitHubService";
 import { createProvider, getProviderConfig } from "../llm/ProviderFactory";
 import { PromptBuilder } from "../llm/PromptBuilder";
 import { GitService } from "../git/GitService";
@@ -16,6 +16,12 @@ import { toFileRef } from "../../utils/refs";
 
 const GENERATED_BLOCK_START = "<!-- code-explainer:generated:start -->";
 const GENERATED_BLOCK_END = "<!-- code-explainer:generated:end -->";
+
+export class NoBranchChangesError extends Error {
+  public constructor() {
+    super("This branch has no edits compared with the base branch yet, so there is no PR description to generate.");
+  }
+}
 
 type DraftPayload = {
   title?: string;
@@ -60,12 +66,17 @@ export class PrDescriptionAnalysisService {
     const defaultGuidelines = config.get<string>("prDescription.defaultGuidelines", "").trim();
     const defaultTemplate = config.get<string>("prDescription.defaultTemplate", "").trim();
 
-    const [branchName, changedFiles, diff, repository] = await Promise.all([
+    const [branchName, changedFiles, diff] = await Promise.all([
       git.getCurrentBranch(),
       git.getChangedFiles(baseBranch),
       git.getDiff(baseBranch),
-      this.githubService.resolveRepository(git),
     ]);
+
+    if (!changedFiles.length && !diff.trim()) {
+      throw new NoBranchChangesError();
+    }
+
+    const repository = await this.githubService.resolveRepository(git);
 
     const hasRemoteBranch = await git.hasRemoteBranch(repository.remoteName, branchName);
     const existingPr = await this.githubService.findOpenPullRequest(repository, branchName, true);

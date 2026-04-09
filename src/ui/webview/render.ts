@@ -916,6 +916,77 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           textarea#pr-body {
             min-height: 360px;
           }
+          .draft-layout {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            align-items: start;
+            margin-top: 16px;
+          }
+          .preview {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(21, 36, 60, 0.85);
+            padding: 16px;
+            min-height: 360px;
+          }
+          .preview > :first-child {
+            margin-top: 0;
+          }
+          .preview h1,
+          .preview h2,
+          .preview h3,
+          .preview h4 {
+            margin: 18px 0 10px;
+            line-height: 1.25;
+          }
+          .preview h1 { font-size: 22px; }
+          .preview h2 { font-size: 18px; }
+          .preview h3 { font-size: 15px; }
+          .preview p,
+          .preview ul,
+          .preview ol,
+          .preview blockquote {
+            margin: 0 0 12px;
+          }
+          .preview ul,
+          .preview ol {
+            padding-left: 20px;
+          }
+          .preview li + li {
+            margin-top: 4px;
+          }
+          .preview code {
+            background: rgba(125, 211, 252, 0.12);
+            border-radius: 6px;
+            padding: 1px 5px;
+            font-size: 0.95em;
+          }
+          .preview pre {
+            background: rgba(7, 17, 31, 0.9);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            overflow: auto;
+            margin: 0 0 12px;
+          }
+          .preview pre code {
+            background: transparent;
+            padding: 0;
+          }
+          .preview hr {
+            border: 0;
+            border-top: 1px solid var(--border);
+            margin: 18px 0;
+          }
+          .preview blockquote {
+            border-left: 3px solid rgba(125, 211, 252, 0.35);
+            padding-left: 12px;
+            color: #c6d5ef;
+          }
+          .preview strong {
+            color: #ffffff;
+          }
           .hint {
             margin-top: 8px;
             color: var(--muted);
@@ -991,10 +1062,16 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             <textarea id="pr-custom-instructions" placeholder="Add one-off guidance for this PR draft.">${escapeHtml(result.customInstructions)}</textarea>
           </label>
           <div class="hint">Panel instructions override saved defaults when you regenerate.</div>
-          <label class="field" style="margin-top:16px;">
-            <span class="field-label">PR Description Draft</span>
-            <textarea id="pr-body">${escapeHtml(result.draftBody)}</textarea>
-          </label>
+          <div class="draft-layout">
+            <label class="field">
+              <span class="field-label">PR Description Draft</span>
+              <textarea id="pr-body">${escapeHtml(result.draftBody)}</textarea>
+            </label>
+            <div class="field">
+              <span class="field-label">Markdown Preview</span>
+              <div class="preview" id="pr-preview"></div>
+            </div>
+          </div>
         </section>
         ${renderCards(result)}
         <script>
@@ -1012,6 +1089,128 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               style: style instanceof HTMLSelectElement ? style.value : "manager",
               customInstructions: customInstructions instanceof HTMLTextAreaElement ? customInstructions.value : "",
             };
+          }
+
+          function escapePreviewHtml(value) {
+            return value
+              .replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;");
+          }
+
+          function renderInlineMarkdown(text) {
+            return text
+              .replace(/\`([^\`]+)\`/g, "<code>$1</code>")
+              .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+              .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+              .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+          }
+
+          function renderMarkdownPreview(markdown) {
+            const preview = document.getElementById("pr-preview");
+            if (!(preview instanceof HTMLElement)) {
+              return;
+            }
+
+            const escaped = escapePreviewHtml(markdown || "");
+            const lines = escaped.split(/\\r?\\n/);
+            const html = [];
+            let inList = false;
+            let listType = "ul";
+            let inCodeBlock = false;
+            let codeLines = [];
+
+            function closeList() {
+              if (inList) {
+                html.push(listType === "ol" ? "</ol>" : "</ul>");
+                inList = false;
+              }
+            }
+
+            function closeCodeBlock() {
+              if (inCodeBlock) {
+                html.push("<pre><code>" + codeLines.join("\\n") + "</code></pre>");
+                inCodeBlock = false;
+                codeLines = [];
+              }
+            }
+
+            for (const rawLine of lines) {
+              const line = rawLine.trimEnd();
+              const trimmed = line.trim();
+
+              if (trimmed.startsWith("\`\`\`")) {
+                closeList();
+                if (inCodeBlock) {
+                  closeCodeBlock();
+                } else {
+                  inCodeBlock = true;
+                  codeLines = [];
+                }
+                continue;
+              }
+
+              if (inCodeBlock) {
+                codeLines.push(line);
+                continue;
+              }
+
+              if (!trimmed) {
+                closeList();
+                html.push("");
+                continue;
+              }
+
+              const headingMatch = trimmed.match(/^(#{1,4})\\s+(.+)$/);
+              if (headingMatch) {
+                closeList();
+                const level = headingMatch[1].length;
+                html.push("<h" + level + ">" + renderInlineMarkdown(headingMatch[2]) + "</h" + level + ">");
+                continue;
+              }
+
+              if (/^---+$/.test(trimmed)) {
+                closeList();
+                html.push("<hr />");
+                continue;
+              }
+
+              const orderedMatch = trimmed.match(/^\\d+\\.\\s+(.+)$/);
+              const unorderedMatch = trimmed.match(/^[-*]\\s+(.+)$/);
+              if (orderedMatch || unorderedMatch) {
+                const nextListType = orderedMatch ? "ol" : "ul";
+                if (!inList || listType !== nextListType) {
+                  closeList();
+                  listType = nextListType;
+                  html.push(listType === "ol" ? "<ol>" : "<ul>");
+                  inList = true;
+                }
+
+                html.push("<li>" + renderInlineMarkdown((orderedMatch || unorderedMatch)[1]) + "</li>");
+                continue;
+              }
+
+              closeList();
+
+              if (trimmed.startsWith("&gt;")) {
+                html.push("<blockquote>" + renderInlineMarkdown(trimmed.replace(/^&gt;\\s?/, "")) + "</blockquote>");
+                continue;
+              }
+
+              html.push("<p>" + renderInlineMarkdown(trimmed) + "</p>");
+            }
+
+            closeList();
+            closeCodeBlock();
+            preview.innerHTML = html.join("");
+          }
+
+          const bodyElement = document.getElementById("pr-body");
+          if (bodyElement instanceof HTMLTextAreaElement) {
+            renderMarkdownPreview(bodyElement.value);
+            bodyElement.addEventListener("input", () => {
+              renderMarkdownPreview(bodyElement.value);
+            });
           }
 
           document.addEventListener("click", (event) => {
