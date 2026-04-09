@@ -11,22 +11,37 @@ import {
 } from "../../models/types";
 
 function markdownToCards(markdown: string): ExplanationCard[] {
-  const sections = markdown
+  // Remove markdown code fences if present
+  const cleanedMarkdown = markdown.replace(/^```markdown\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+
+  const sections = cleanedMarkdown
     .split(/\n(?=#{1,3}\s)/g)
     .map((section) => section.trim())
     .filter(Boolean);
 
   if (!sections.length) {
-    return [{ title: "Summary", body: markdown.trim() }];
+    return [{ title: "Summary", body: cleanedMarkdown.trim() }];
   }
 
-  return sections.map((section) => {
-    const lines = section.split("\n");
-    const titleLine = lines.shift() ?? "Summary";
-    const title = titleLine.replace(/^#{1,3}\s*/, "").trim() || "Summary";
-    const body = lines.join("\n").trim() || title;
-    return { title, body };
-  });
+  return sections
+    .map((section) => {
+      const lines = section.split("\n");
+      const titleLine = lines.shift() ?? "Summary";
+      const title = titleLine.replace(/^#{1,3}\s*/, "").trim() || "Summary";
+      const body = lines.join("\n").trim() || title;
+      return { title, body };
+    })
+    .filter((card) => {
+      // Filter out empty or malformed cards
+      if (!card.body || card.body.length < 3) {
+        return false;
+      }
+      // Filter out cards that are just code fences or artifacts
+      if (/^```/.test(card.body) || card.body === card.title) {
+        return false;
+      }
+      return true;
+    });
 }
 
 export function toRepoSummary(markdown: string): RepoSummary {

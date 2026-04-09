@@ -40,6 +40,11 @@ export class CodeExplainerProvider implements vscode.TreeDataProvider<SidebarNod
           command: { command: "codeExplainer.explainRepo", title: "Explain Repo" },
         },
         {
+          id: "directory",
+          label: "Explain Directory",
+          command: { command: "codeExplainer.explainDirectory", title: "Explain Directory" },
+        },
+        {
           id: "branch",
           label: "Compare Branch With Main",
           command: { command: "codeExplainer.compareBranch", title: "Compare Branch" },
@@ -81,6 +86,7 @@ export class CodeExplainerProvider implements vscode.TreeDataProvider<SidebarNod
       const cachedItems = this.cacheService.list();
       const categories = [
         { id: "history:repo", label: "Explain Repo", kind: "repo" },
+        { id: "history:directory", label: "Explain Directory", kind: "directory" },
         { id: "history:branch", label: "Compare Branch With Main", kind: "branch" },
         { id: "history:selection", label: "Explain Selection", kind: "selection" },
         { id: "history:trace", label: "Trace Relationships", kind: "trace" },

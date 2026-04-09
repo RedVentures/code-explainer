@@ -144,6 +144,7 @@ export type SelectionTarget = {
 
 export type CachedResultSource =
   | { kind: "repo" }
+  | { kind: "directory"; directoryPath: string }
   | { kind: "branch"; baseBranch: string }
   | ({ kind: "selection" } & SelectionTarget)
   | ({ kind: "trace" } & SelectionTarget)

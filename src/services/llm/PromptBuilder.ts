@@ -23,6 +23,30 @@ export class PromptBuilder {
     };
   }
 
+  public buildDirectoryPrompt(context: {
+    workspaceName: string;
+    rootPath: string;
+    directoryPath: string;
+    directoryFiles: string[];
+    repoTopLevel: string[];
+    repoManifests: string[];
+  }): PromptInput {
+    return {
+      system: sharedSystem,
+      user: [
+        `Explain this specific directory within a larger repository.`,
+        `Focus primarily on the directory contents, but be aware of the broader repo context.`,
+        `Workspace: ${context.workspaceName}`,
+        `Root path: ${context.rootPath}`,
+        `Directory being analyzed: ${context.directoryPath}`,
+        `\nBroader repo context (for reference):`,
+        `Top-level directories: ${context.repoTopLevel.join(", ") || "(none)"}`,
+        `Key manifests: ${context.repoManifests.slice(0, 5).join(", ") || "(none)"}`,
+        `\nFiles in this directory:\n${context.directoryFiles.join("\n") || "(none)"}`,
+      ].join("\n\n"),
+    };
+  }
+
   public buildBranchPrompt(context: BranchContext): PromptInput {
     return {
       system: sharedSystem,
