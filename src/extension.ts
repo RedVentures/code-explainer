@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { createCompareBranchCommand } from "./commands/compareBranch";
+import { createCompareFileWithBranchCommand } from "./commands/compareFileWithBranch";
 import { createDrawFlowChartCommand } from "./commands/drawFlowChart";
 import { createExplainRepoCommand } from "./commands/explainRepo";
 import { createExplainSelectionCommand } from "./commands/explainSelection";
@@ -38,6 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const explainRepo = createExplainRepoCommand(panel, repoAnalysis, cacheService, sidebarProvider);
   const explainSelection = createExplainSelectionCommand(panel, selectionAnalysis, cacheService, sidebarProvider);
   const compareBranch = createCompareBranchCommand(panel, branchAnalysis, cacheService, sidebarProvider);
+  const compareFileWithBranch = createCompareFileWithBranchCommand(panel, branchAnalysis, cacheService, sidebarProvider);
   const drawFlowChart = createDrawFlowChartCommand(panel, flowAnalysis, cacheService, sidebarProvider);
   const traceRelationships = createTraceRelationshipsCommand(
     panel,
@@ -52,6 +54,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("codeExplainer.explainRepo", wrapCommand(explainRepo)),
     vscode.commands.registerCommand("codeExplainer.explainSelection", wrapCommand(explainSelection)),
     vscode.commands.registerCommand("codeExplainer.compareBranch", wrapCommand(compareBranch)),
+    vscode.commands.registerCommand("codeExplainer.compareFileWithBranch", wrapCommand(compareFileWithBranch)),
     vscode.commands.registerCommand("codeExplainer.drawFlowChart", wrapCommand(drawFlowChart)),
     vscode.commands.registerCommand("codeExplainer.traceRelationships", wrapCommand(traceRelationships)),
     vscode.commands.registerCommand(
@@ -63,7 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         panel.show(entry.result, {
-          onAction: (action) => void handlePanelAction(action),
+          onAction: (action) => void handlePanelAction(action, panel),
           onFileRef: (fileRef) => void openFileRef(fileRef),
           onRefresh: () =>
             void refreshCachedEntry(

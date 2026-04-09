@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { SelectionExplanation, SelectionTarget, TraceExplanation } from "../../models/types";
+import { FileRef, SelectionExplanation, SelectionTarget, TraceExplanation } from "../../models/types";
 import { createProvider, getProviderConfig } from "../llm/ProviderFactory";
 import { PromptBuilder } from "../llm/PromptBuilder";
 import { RelationshipService } from "../repo/RelationshipService";
@@ -20,23 +20,117 @@ export class SelectionAnalysisService {
     const folder = this.repoScanner.getWorkspaceFolder();
     const context = await this.symbolService.getSelectionContext(editor);
     const provider = createProvider(getProviderConfig());
+    const startLine = editor.selection.start.line + 1;
+    const endLine = editor.selection.end.line + 1;
     const prompt = this.promptBuilder.buildSelectionPrompt({
       filePath: editor.document.uri.fsPath,
       selection: context.selectionText,
-      startLine: editor.selection.start.line + 1,
-      endLine: editor.selection.end.line + 1,
+      startLine,
+      endLine,
       symbolName: context.symbolName,
       imports: context.imports,
       surroundingText: context.surroundingText,
     });
     const markdown = await provider.generate(prompt);
-    const result = toSelectionExplanation(markdown);
+    const fileName = editor.document.uri.fsPath.split("/").pop() ?? "file";
+    const result = toSelectionExplanation(markdown, fileName, startLine, endLine);
+
+    // Gather related files based on imports, references, and dependencies
+    const relatedFiles = await this.gatherRelatedFiles(editor, folder.uri.fsPath, context.symbolName);
+
     result.cards.push({
       title: "Related Files",
-      body: "Likely nearby files worth reading next.",
-      refs: await this.relationshipService.findNearbyFiles(editor.document.uri.fsPath, folder.uri.fsPath),
+      body: relatedFiles.length > 0
+        ? "Files imported by, referencing, or related to the selected code."
+        : "No directly related files were found for this selection.",
+      refs: relatedFiles,
     });
     return result;
+  }
+
+  private async gatherRelatedFiles(
+    editor: vscode.TextEditor,
+    rootPath: string,
+    symbolName?: string
+  ): Promise<FileRef[]> {
+    const allRefs: FileRef[] = [];
+    const seen = new Set<string>();
+    const currentFilePath = editor.document.uri.fsPath;
+
+    // Helper to check if a file is in the workspace and not a config file
+    const isWorkspaceFile = (ref: FileRef): boolean => {
+      if (!ref.path.startsWith(rootPath)) {
+        return false;
+      }
+
+      // Exclude common config files
+      const filename = ref.path.split('/').pop() || '';
+      const configPatterns = [
+        /^package\.json$/,
+        /^tsconfig\.json$/,
+        /\.config\.(js|ts|mjs|cjs)$/,
+        /^jest\.config/,
+        /^vitest\.config/,
+        /^vite\.config/,
+        /^webpack\.config/,
+        /^eslint\.config/,
+        /^prettier\.config/,
+      ];
+
+      return !configPatterns.some(pattern => pattern.test(filename));
+    };
+
+    // 1. Get file-level imports/dependencies (most reliable)
+    const dependsOn = await this.relationshipService["findDependsOn"](editor.document, rootPath);
+    const workspaceDeps = dependsOn.filter(isWorkspaceFile);
+
+    // 2. Get files that reference this code
+    const usedBy = await this.relationshipService["findUsedBy"](editor, rootPath);
+    const workspaceUsedBy = usedBy.filter(isWorkspaceFile);
+
+    // 3. Get function-level relationships (may include workspace files)
+    const dependsOnFunctions = await this.relationshipService["findDependsOnFunctions"](editor, rootPath, symbolName);
+    const workspaceDepFunctions = dependsOnFunctions.filter(isWorkspaceFile);
+
+    const usedByFunctions = await this.relationshipService["findUsedByFunctions"](editor, rootPath, symbolName);
+    const workspaceUsedByFunctions = usedByFunctions.filter(isWorkspaceFile);
+
+    // Prioritize: file imports > usages > function calls
+    const prioritizedRefs = [
+      ...workspaceDeps,
+      ...workspaceUsedBy,
+      ...workspaceDepFunctions,
+      ...workspaceUsedByFunctions,
+    ];
+
+    // Add unique refs
+    for (const ref of prioritizedRefs) {
+      const key = `${ref.path}:${ref.startLine ?? 0}`;
+      if (!seen.has(key) && ref.path !== currentFilePath) {
+        seen.add(key);
+        allRefs.push(ref);
+        if (allRefs.length >= 8) {
+          break;
+        }
+      }
+    }
+
+    // If we found few results, supplement with nearby files (tests, similar names)
+    if (allRefs.length < 4) {
+      const nearbyFiles = await this.relationshipService["findNearbyFiles"](currentFilePath, rootPath);
+      for (const ref of nearbyFiles) {
+        const key = `${ref.path}:${ref.startLine ?? 0}`;
+        if (!seen.has(key) && ref.path !== currentFilePath && isWorkspaceFile(ref)) {
+          seen.add(key);
+          allRefs.push(ref);
+          if (allRefs.length >= 8) {
+            break;
+          }
+        }
+      }
+    }
+
+    return allRefs.slice(0, 8);
   }
 
   public async traceRelationships(target?: SelectionTarget): Promise<TraceExplanation> {

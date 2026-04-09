@@ -36,6 +36,26 @@ export class PromptBuilder {
     };
   }
 
+  public buildFileComparisonPrompt(context: {
+    filePath: string;
+    branchName: string;
+    baseBranch: string;
+    diff: string;
+  }): PromptInput {
+    return {
+      system: sharedSystem,
+      user: [
+        `Analyze the changes made to this file in the current branch compared to ${context.baseBranch}.`,
+        `Focus on what changed, why it might have changed, and the impact of these changes.`,
+        `Include both committed changes and any uncommitted local changes.`,
+        `File: ${context.filePath}`,
+        `Current branch: ${context.branchName}`,
+        `Comparing against: ${context.baseBranch}`,
+        `\nChanges:\n${context.diff}`,
+      ].join("\n\n"),
+    };
+  }
+
   public buildSelectionPrompt(context: SelectionContext): PromptInput {
     return {
       system: sharedSystem,

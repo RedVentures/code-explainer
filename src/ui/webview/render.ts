@@ -21,7 +21,12 @@ function renderRefs(refs: FileRef[] | undefined): string {
 }
 
 function renderCards(result: AnalysisResult): string {
-  return result.cards
+  // For branch and selection, skip the first card since it's already shown in the headline
+  const cardsToRender = (result.kind === "branch" || result.kind === "selection")
+    ? result.cards.slice(1)
+    : result.cards;
+
+  return cardsToRender
     .map(
       (card) => `
         <section class="card">

@@ -5,10 +5,16 @@ import { CacheService } from "../storage/CacheService";
 import { CodeExplainerProvider } from "../ui/sidebar/CodeExplainerProvider";
 import { ResultsPanel } from "../ui/webview/panel";
 
-export async function handlePanelAction(action: string): Promise<void> {
+export async function handlePanelAction(action: string, panel?: ResultsPanel): Promise<void> {
   const normalized = action.toLowerCase();
 
   if (normalized.includes("branch")) {
+    // If we're in a selection context, compare only that file
+    const currentResult = panel?.getCurrentResult();
+    if (currentResult?.kind === "selection") {
+      await vscode.commands.executeCommand("codeExplainer.compareFileWithBranch");
+      return;
+    }
     await vscode.commands.executeCommand("codeExplainer.compareBranch");
     return;
   }

@@ -26,7 +26,7 @@ export function createExplainRepoCommand(
       getFresh: () => analysisService.analyze(),
       render: (result, refresh) =>
         panel.show(result, {
-          onAction: (action) => void handlePanelAction(action),
+          onAction: (action) => void handlePanelAction(action, panel),
           onFileRef: (fileRef) => void openFileRef(fileRef),
           onRefresh: refresh,
         }),

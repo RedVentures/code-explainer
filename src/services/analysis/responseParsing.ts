@@ -40,7 +40,24 @@ export function toRepoSummary(markdown: string): RepoSummary {
 }
 
 export function toBranchSummary(markdown: string, branchName: string, baseBranch: string, changedFiles: FileRef[]): BranchSummary {
-  const cards = markdownToCards(markdown);
+  const cards = markdownToCards(markdown)
+    .map((card) => {
+      // Clean up card titles for branch comparisons
+      let title = card.title;
+
+      // If title contains parenthetical text like "How It Works (Key Changes)", extract just the parenthetical part
+      const parentheticalMatch = title.match(/^.*\(([^)]+)\)$/);
+      if (parentheticalMatch) {
+        title = parentheticalMatch[1];
+      }
+
+      return { ...card, title };
+    })
+    .filter((card) => {
+      // Remove generic "How It Works" cards since we've extracted specific info
+      return card.title !== "How It Works";
+    });
+
   return {
     kind: "branch",
     headline: cards[0]?.body.split("\n")[0] ?? `Changes in ${branchName}`,
@@ -52,11 +69,22 @@ export function toBranchSummary(markdown: string, branchName: string, baseBranch
   };
 }
 
-export function toSelectionExplanation(markdown: string): SelectionExplanation {
+export function toSelectionExplanation(
+  markdown: string,
+  fileName?: string,
+  startLine?: number,
+  endLine?: number
+): SelectionExplanation {
   const cards = markdownToCards(markdown);
+  let headline = "Selection overview";
+
+  if (fileName && startLine !== undefined && endLine !== undefined) {
+    headline = `Explain lines ${startLine}-${endLine} of ${fileName}`;
+  }
+
   return {
     kind: "selection",
-    headline: cards[0]?.body.split("\n")[0] ?? "Selection overview",
+    headline,
     cards,
     nextActions: ["Draw current branch diagram", "Trace relationships", "Compare branch with main"],
   };
