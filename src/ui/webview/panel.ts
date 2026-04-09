@@ -7,6 +7,7 @@ export class ResultsPanel {
   private onAction: ((action: string) => void) | undefined;
   private onFileRef: ((fileRef: string) => void) | undefined;
   private onRefresh: (() => void) | undefined;
+  private currentResult: AnalysisResult | undefined;
 
   public constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -19,6 +20,7 @@ export class ResultsPanel {
     }
   ): void {
     const panel = this.ensurePanel();
+    this.currentResult = result;
     this.onAction = handlers.onAction;
     this.onFileRef = handlers.onFileRef;
     this.onRefresh = handlers.onRefresh;
@@ -26,6 +28,10 @@ export class ResultsPanel {
     panel.title = `Code Explainer: ${result.kind}`;
     panel.webview.html = renderHtml("Code Explainer", result);
     panel.reveal(vscode.ViewColumn.Beside);
+  }
+
+  public getCurrentResult(): AnalysisResult | undefined {
+    return this.currentResult;
   }
 
   public showLoading(title: string, message: string): void {

@@ -52,11 +52,22 @@ export function toBranchSummary(markdown: string, branchName: string, baseBranch
   };
 }
 
-export function toSelectionExplanation(markdown: string): SelectionExplanation {
+export function toSelectionExplanation(
+  markdown: string,
+  fileName?: string,
+  startLine?: number,
+  endLine?: number
+): SelectionExplanation {
   const cards = markdownToCards(markdown);
+  let headline = "Selection overview";
+
+  if (fileName && startLine !== undefined && endLine !== undefined) {
+    headline = `Explain lines ${startLine}-${endLine} of ${fileName}`;
+  }
+
   return {
     kind: "selection",
-    headline: cards[0]?.body.split("\n")[0] ?? "Selection overview",
+    headline,
     cards,
     nextActions: ["Draw current branch diagram", "Trace relationships", "Compare branch with main"],
   };
