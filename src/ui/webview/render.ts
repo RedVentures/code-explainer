@@ -365,89 +365,167 @@ export function renderHtml(title: string, result: AnalysisResult): string {
               return;
             }
 
+            const fontFamily = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+
+            // Sort nodes by order
             const nodes = [...chart.nodes].sort((a, b) => a.order - b.order);
-            const usedLanes = laneOrder.filter((lane) => nodes.some((node) => node.lane === lane));
-            const laneIndexMap = new Map(usedLanes.map((lane, index) => [lane, index]));
-            const paddingX = 60;
-            const paddingTop = 86;
-            const laneGap = 240;
-            const rowGap = 30;
-            const laneWidth = 200;
-            const nodeWidth = 176;
-            const laneHeights = new Map();
+            const usedLanes = laneOrder.filter((lane) => nodes.some((n) => n.lane === lane));
+            const laneIndexMap = new Map(usedLanes.map((lane, i) => [lane, i]));
+
+            // Layout constants
+            const PAD_X = 50;
+            const PAD_TOP = 80;
+            const LANE_W = 230;
+            const LANE_GAP = 40;
+            const NODE_W = 200;
+            const NODE_H = 100;
+            const ROW_GAP = 50;
+
+            // Assign rows using dependency-based greedy packing.
+            // Each node goes in the earliest row where:
+            //   1. Its lane slot is not already occupied
+            //   2. All predecessor nodes (via edges) are in strictly earlier rows
+            // This compresses the diagram vertically by sharing rows across lanes.
+            const incomingEdges = new Map();
+            for (const edge of chart.edges) {
+              if (!incomingEdges.has(edge.to)) {
+                incomingEdges.set(edge.to, new Set());
+              }
+              incomingEdges.get(edge.to).add(edge.from);
+            }
+
+            const nodeRow = new Map();
+            const rowLaneUsed = [];
+
+            for (const node of nodes) {
+              const preds = incomingEdges.get(node.id) || new Set();
+              let minRow = 0;
+
+              for (const predId of preds) {
+                if (nodeRow.has(predId)) {
+                  minRow = Math.max(minRow, nodeRow.get(predId) + 1);
+                }
+              }
+
+              let row = minRow;
+              while (true) {
+                if (!rowLaneUsed[row]) {
+                  rowLaneUsed[row] = new Set();
+                }
+                if (!rowLaneUsed[row].has(node.lane)) {
+                  break;
+                }
+                row++;
+              }
+
+              nodeRow.set(node.id, row);
+              rowLaneUsed[row].add(node.lane);
+            }
+
+            const totalRows = rowLaneUsed.length;
 
             const positioned = nodes.map((node) => {
-              const index = laneIndexMap.get(node.lane) ?? 0;
-              const titleLines = wrapText(node.title, 20);
-              const subtitleLines = wrapText(node.subtitle || "", 28);
-              const refLine = node.fileRef?.label ? 1 : 0;
-              const textHeight = titleLines.length * 14 + subtitleLines.length * 12 + refLine * 10;
-              const nodeHeight = Math.max(92, 28 + textHeight + 16);
-              const laneOffset = laneHeights.get(node.lane) || 0;
-              laneHeights.set(node.lane, laneOffset + nodeHeight + rowGap);
+              const laneIdx = laneIndexMap.get(node.lane) ?? 0;
+              const row = nodeRow.get(node.id) ?? 0;
+
+              const titleLines = wrapText(node.title, 24);
+              const subtitleLines = wrapText(node.subtitle || "", 34);
+
+              const laneX = PAD_X + laneIdx * (LANE_W + LANE_GAP);
+              const nodeX = laneX + (LANE_W - NODE_W) / 2;
+              const nodeY = PAD_TOP + row * (NODE_H + ROW_GAP);
+
               return {
                 ...node,
                 titleLines,
                 subtitleLines,
-                x: paddingX + index * laneGap,
-                y: paddingTop + laneOffset,
-                width: nodeWidth,
-                height: nodeHeight,
+                x: nodeX,
+                y: nodeY,
+                width: NODE_W,
+                height: NODE_H,
+                row,
               };
             });
 
-            const width = Math.max(860, paddingX * 2 + Math.max(usedLanes.length - 1, 0) * laneGap + laneWidth);
-            const height = Math.max(680, ...positioned.map((node) => node.y + node.height + 72));
-            svg.setAttribute("viewBox", "0 0 " + width + " " + height);
-            svg.setAttribute("width", String(width));
-            svg.setAttribute("height", String(height));
+            // SVG dimensions
+            const svgW = Math.max(860, PAD_X * 2 + usedLanes.length * LANE_W + Math.max(0, usedLanes.length - 1) * LANE_GAP);
+            const svgH = Math.max(680, PAD_TOP + totalRows * (NODE_H + ROW_GAP) + 50);
+
+            svg.setAttribute("viewBox", "0 0 " + svgW + " " + svgH);
+            svg.setAttribute("width", String(svgW));
+            svg.setAttribute("height", String(svgH));
+            svg.style.fontFamily = fontFamily;
             svg.innerHTML = "";
 
+            // Defs: arrow marker + drop shadow filter
             const defs = createSvg("defs");
+
             const marker = createSvg("marker");
             marker.setAttribute("id", "arrow");
-            marker.setAttribute("markerWidth", "8");
-            marker.setAttribute("markerHeight", "6");
-            marker.setAttribute("refX", "8");
-            marker.setAttribute("refY", "3");
+            marker.setAttribute("markerWidth", "10");
+            marker.setAttribute("markerHeight", "7");
+            marker.setAttribute("refX", "9");
+            marker.setAttribute("refY", "3.5");
             marker.setAttribute("orient", "auto");
             const markerPath = createSvg("path");
-            markerPath.setAttribute("d", "M0,0 L8,3 L0,6");
-            markerPath.setAttribute("fill", "#9ca3af");
+            markerPath.setAttribute("d", "M0,0.5 L8.5,3.5 L0,6.5 L1.5,3.5 Z");
+            markerPath.setAttribute("fill", "#94a3b8");
             marker.appendChild(markerPath);
             defs.appendChild(marker);
+
+            const filter = createSvg("filter");
+            filter.setAttribute("id", "shadow");
+            filter.setAttribute("x", "-4%");
+            filter.setAttribute("y", "-4%");
+            filter.setAttribute("width", "108%");
+            filter.setAttribute("height", "116%");
+            const feDropShadow = createSvg("feDropShadow");
+            feDropShadow.setAttribute("dx", "0");
+            feDropShadow.setAttribute("dy", "2");
+            feDropShadow.setAttribute("stdDeviation", "3");
+            feDropShadow.setAttribute("flood-color", "rgba(0,0,0,0.08)");
+            filter.appendChild(feDropShadow);
+            defs.appendChild(filter);
+
             svg.appendChild(defs);
 
-            usedLanes.forEach((lane) => {
-              const index = laneIndexMap.get(lane) ?? 0;
+            // Draw lane backgrounds
+            usedLanes.forEach((lane, idx) => {
               const meta = laneMeta[lane];
+              const x = PAD_X + idx * (LANE_W + LANE_GAP) - 4;
               const group = createSvg("g");
-              const x = paddingX - 14 + index * laneGap;
+
               const rect = createSvg("rect");
               rect.setAttribute("x", String(x));
-              rect.setAttribute("y", "28");
-              rect.setAttribute("width", String(laneWidth));
-              rect.setAttribute("height", String(height - 56));
-              rect.setAttribute("rx", "16");
+              rect.setAttribute("y", "24");
+              rect.setAttribute("width", String(LANE_W + 8));
+              rect.setAttribute("height", String(svgH - 48));
+              rect.setAttribute("rx", "14");
               rect.setAttribute("fill", meta.fill);
-              rect.setAttribute("fill-opacity", "0.38");
-              rect.setAttribute("stroke", "#d1d5db");
-              rect.setAttribute("stroke-width", "1.2");
+              rect.setAttribute("fill-opacity", "0.28");
+              rect.setAttribute("stroke", meta.stroke);
+              rect.setAttribute("stroke-opacity", "0.15");
+              rect.setAttribute("stroke-width", "1");
               group.appendChild(rect);
 
               const label = createSvg("text");
-              label.setAttribute("x", String(x + laneWidth / 2));
-              label.setAttribute("y", "52");
+              label.setAttribute("x", String(x + (LANE_W + 8) / 2));
+              label.setAttribute("y", "50");
               label.setAttribute("text-anchor", "middle");
-              label.setAttribute("font-size", "13");
+              label.setAttribute("font-size", "12");
               label.setAttribute("font-weight", "700");
+              label.setAttribute("letter-spacing", "0.08em");
               label.setAttribute("fill", meta.text);
+              label.setAttribute("font-family", fontFamily);
               label.textContent = lane.toUpperCase();
               group.appendChild(label);
               svg.appendChild(group);
             });
 
-            const byId = new Map(positioned.map((node) => [node.id, node]));
+            // --- Phase 1: Draw edge paths (collect label data for later) ---
+            const byId = new Map(positioned.map((n) => [n.id, n]));
+            const edgeLabels = [];
+
             chart.edges.forEach((edge) => {
               const from = byId.get(edge.from);
               const to = byId.get(edge.to);
@@ -455,46 +533,61 @@ export function renderHtml(title: string, result: AnalysisResult): string {
                 return;
               }
 
-              const startX = from.x + from.width / 2;
-              const startY = from.y + from.height;
-              const endX = to.x + to.width / 2;
-              const endY = to.y;
+              const x1 = from.x + from.width / 2;
+              const y1 = from.y + from.height;
+              const x2 = to.x + to.width / 2;
+              const y2 = to.y - 8;
+
               const sameLane = from.lane === to.lane;
+              let d;
+              let labelX;
+              let labelY;
+              let labelAnchor;
+
+              if (sameLane) {
+                const rowDiff = to.row - from.row;
+                if (rowDiff <= 1) {
+                  // Adjacent rows: straight vertical line
+                  d = "M " + x1 + "," + y1 + " L " + x2 + "," + y2;
+                  labelX = x1 + from.width / 2 + 14;
+                  labelY = Math.round((y1 + y2) / 2);
+                  labelAnchor = "start";
+                } else {
+                  // Multi-row span: bow right to clear intermediate nodes
+                  const bowX = from.width * 0.7 + 8;
+                  d = "M " + x1 + "," + y1 +
+                      " C " + (x1 + bowX) + "," + (y1 + 30) +
+                      " " + (x2 + bowX) + "," + (y2 - 30) +
+                      " " + x2 + "," + y2;
+                  labelX = Math.round(x1 + bowX * 0.75) + 8;
+                  labelY = Math.round((y1 + y2) / 2);
+                  labelAnchor = "start";
+                }
+              } else {
+                // Cross-lane: smooth cubic bezier
+                const dy = Math.abs(y2 - y1);
+                const cy1 = y1 + dy * 0.3;
+                const cy2 = y2 - dy * 0.3;
+                d = "M " + x1 + "," + y1 + " C " + x1 + "," + cy1 + " " + x2 + "," + cy2 + " " + x2 + "," + y2;
+                labelX = Math.round((x1 + x2) / 2);
+                labelY = Math.round((y1 + y2) / 2);
+                labelAnchor = "middle";
+              }
+
               const path = createSvg("path");
-              const midY = Math.round((startY + endY) / 2);
-              const d = sameLane
-                ? "M " + startX + "," + startY + " L " + endX + "," + endY
-                : "M " + startX + "," + startY + " L " + startX + "," + midY + " L " + endX + "," + midY + " L " + endX + "," + endY;
               path.setAttribute("d", d);
               path.setAttribute("fill", "none");
-              path.setAttribute("stroke", "#9ca3af");
-              path.setAttribute("stroke-width", "2");
+              path.setAttribute("stroke", "#94a3b8");
+              path.setAttribute("stroke-width", "1.5");
               path.setAttribute("marker-end", "url(#arrow)");
               svg.appendChild(path);
 
               if (edge.label) {
-                const labelX = sameLane ? startX + 14 : Math.round((startX + endX) / 2);
-                const labelY = sameLane ? Math.round((startY + endY) / 2) - 8 : midY - 8;
-                const bg = createSvg("rect");
-                bg.setAttribute("x", String(labelX - 48));
-                bg.setAttribute("y", String(labelY - 11));
-                bg.setAttribute("width", "96");
-                bg.setAttribute("height", "18");
-                bg.setAttribute("rx", "6");
-                bg.setAttribute("fill", "#ffffff");
-                svg.appendChild(bg);
-
-                const text = createSvg("text");
-                text.setAttribute("x", String(labelX));
-                text.setAttribute("y", String(labelY + 2));
-                text.setAttribute("text-anchor", "middle");
-                text.setAttribute("font-size", "10");
-                text.setAttribute("fill", "#6b7280");
-                text.textContent = edge.label;
-                svg.appendChild(text);
+                edgeLabels.push({ text: edge.label, x: labelX, y: labelY, anchor: labelAnchor });
               }
             });
 
+            // --- Phase 2: Draw nodes on top of edge paths ---
             positioned.forEach((node) => {
               const meta = laneMeta[node.lane] || laneMeta.unknown;
               const group = createSvg("g");
@@ -512,29 +605,33 @@ export function renderHtml(title: string, result: AnalysisResult): string {
               box.setAttribute("rx", "10");
               box.setAttribute("fill", "#ffffff");
               box.setAttribute("stroke", meta.stroke);
-              box.setAttribute("stroke-width", "1.4");
+              box.setAttribute("stroke-width", "1.5");
+              box.setAttribute("filter", "url(#shadow)");
               group.appendChild(box);
 
-              node.titleLines.forEach((line, lineIndex) => {
+              const titleStartY = node.y + 30;
+              node.titleLines.forEach((line, i) => {
                 const text = createSvg("text");
                 text.setAttribute("x", String(node.x + node.width / 2));
-                text.setAttribute("y", String(node.y + 24 + lineIndex * 14));
+                text.setAttribute("y", String(titleStartY + i * 18));
                 text.setAttribute("text-anchor", "middle");
-                text.setAttribute("font-size", "12");
+                text.setAttribute("font-size", "13");
                 text.setAttribute("font-weight", "600");
                 text.setAttribute("fill", meta.text);
+                text.setAttribute("font-family", fontFamily);
                 text.textContent = line;
                 group.appendChild(text);
               });
 
-              const subtitleStartY = node.y + 24 + node.titleLines.length * 14 + 10;
-              node.subtitleLines.forEach((line, lineIndex) => {
+              const subtitleStartY = titleStartY + node.titleLines.length * 18 + 8;
+              node.subtitleLines.forEach((line, i) => {
                 const text = createSvg("text");
                 text.setAttribute("x", String(node.x + node.width / 2));
-                text.setAttribute("y", String(subtitleStartY + lineIndex * 12));
+                text.setAttribute("y", String(subtitleStartY + i * 15));
                 text.setAttribute("text-anchor", "middle");
-                text.setAttribute("font-size", "9");
-                text.setAttribute("fill", "#6b7280");
+                text.setAttribute("font-size", "10");
+                text.setAttribute("fill", "#64748b");
+                text.setAttribute("font-family", fontFamily);
                 text.textContent = line;
                 group.appendChild(text);
               });
@@ -542,15 +639,55 @@ export function renderHtml(title: string, result: AnalysisResult): string {
               if (node.fileRef?.label) {
                 const ref = createSvg("text");
                 ref.setAttribute("x", String(node.x + node.width / 2));
-                ref.setAttribute("y", String(node.y + node.height - 10));
+                ref.setAttribute("y", String(node.y + node.height - 14));
                 ref.setAttribute("text-anchor", "middle");
-                ref.setAttribute("font-size", "8");
+                ref.setAttribute("font-size", "9");
                 ref.setAttribute("fill", meta.stroke);
-                ref.textContent = clampLine(node.fileRef.label, 28);
+                ref.setAttribute("font-family", fontFamily);
+                ref.textContent = clampLine(node.fileRef.label, 30);
                 group.appendChild(ref);
               }
 
               svg.appendChild(group);
+            });
+
+            // --- Phase 3: Draw edge labels on top of everything ---
+            // Nudge overlapping labels apart
+            for (let i = 0; i < edgeLabels.length; i++) {
+              for (let j = 0; j < i; j++) {
+                if (Math.abs(edgeLabels[i].y - edgeLabels[j].y) < 22 &&
+                    Math.abs(edgeLabels[i].x - edgeLabels[j].x) < 140) {
+                  edgeLabels[i].y = edgeLabels[j].y + 26;
+                }
+              }
+            }
+
+            edgeLabels.forEach((lbl) => {
+              const labelText = clampLine(lbl.text, 36);
+              const estimatedWidth = labelText.length * 6.5 + 16;
+              const bgX = lbl.anchor === "start" ? lbl.x - 6 : lbl.x - estimatedWidth / 2;
+
+              const bg = createSvg("rect");
+              bg.setAttribute("x", String(bgX));
+              bg.setAttribute("y", String(lbl.y - 10));
+              bg.setAttribute("width", String(estimatedWidth));
+              bg.setAttribute("height", "20");
+              bg.setAttribute("rx", "10");
+              bg.setAttribute("fill", "#ffffff");
+              bg.setAttribute("fill-opacity", "0.95");
+              bg.setAttribute("stroke", "#e2e8f0");
+              bg.setAttribute("stroke-width", "0.5");
+              svg.appendChild(bg);
+
+              const text = createSvg("text");
+              text.setAttribute("x", String(lbl.x));
+              text.setAttribute("y", String(lbl.y + 4));
+              text.setAttribute("text-anchor", lbl.anchor);
+              text.setAttribute("font-size", "10");
+              text.setAttribute("fill", "#64748b");
+              text.setAttribute("font-family", fontFamily);
+              text.textContent = labelText;
+              svg.appendChild(text);
             });
           }
 
