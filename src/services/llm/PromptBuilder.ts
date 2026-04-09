@@ -1,4 +1,4 @@
-import { BranchContext, PrDescriptionStyle, PromptInput, RepoContext, SelectionContext } from "../../models/types";
+import { BranchContext, PromptInput, RepoContext, SelectionContext } from "../../models/types";
 
 const sharedSystem = [
   "You are an expert software engineer helping a developer understand code.",
@@ -158,7 +158,8 @@ export class PromptBuilder {
     diff: string;
     existingTitle?: string;
     existingBody?: string;
-    style: PrDescriptionStyle;
+    styleLabel: string;
+    styleGuidance: string;
     customInstructions?: string;
     teamGuidelines?: string;
     template?: string;
@@ -170,12 +171,15 @@ export class PromptBuilder {
         'Use this schema: {"title": string, "generatedBody": string}.',
         "The generatedBody will be inserted into a managed section inside the full PR description, so do not mention markers, automation, or implementation notes about the tool itself.",
         "Default shape: a short executive summary followed by clear markdown sections.",
+        "The selected audience/style is a hard requirement. Vocabulary, level of detail, and section emphasis must noticeably match that audience.",
+        "If the user changes style and regenerates, rewrite the draft to fit the new audience rather than reusing the prior tone.",
         "Be accurate to the supplied diff. If something is inferred, say so carefully.",
         "Keep the language readable and specific rather than generic release-note filler.",
       ].join(" "),
       user: [
         "Generate a PR title and PR description section for the current branch.",
-        `Audience/style: ${this.getPrStyleGuidance(context.style)}`,
+        `Audience/style: ${context.styleLabel}`,
+        `Style guidance:\n${context.styleGuidance.trim() || "(none)"}`,
         `Current branch: ${context.branchName}`,
         `Base branch: ${context.baseBranch}`,
         `Changed files:\n${context.changedFiles.join("\n") || "(none)"}`,
@@ -187,18 +191,5 @@ export class PromptBuilder {
         `Custom run instructions:\n${context.customInstructions?.trim() || "(none)"}`,
       ].join("\n\n"),
     };
-  }
-
-  private getPrStyleGuidance(style: PrDescriptionStyle): string {
-    switch (style) {
-      case "business-stakeholder":
-        return "Business stakeholder: non-technical, impact-focused, concise, and outcome-oriented.";
-      case "code-collaborator":
-        return "Code collaborator: technical, implementation-aware, explicit about architecture, risks, and testing.";
-      case "manager":
-        return "Manager: semi-technical, balancing delivery impact with enough implementation detail to understand scope and risk.";
-      case "other":
-        return "Other: use the custom instructions as the primary guide and keep the tone professional.";
-    }
   }
 }

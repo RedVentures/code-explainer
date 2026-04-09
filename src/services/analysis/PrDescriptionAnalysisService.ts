@@ -5,9 +5,10 @@ import {
   FileRef,
   PrDescriptionExplanation,
   PrDescriptionStyle,
+  PrDescriptionStyleOption,
   PrState,
 } from "../../models/types";
-import { GitHubPullRequest, GitHubRepository, GitHubService } from "../github/GitHubService";
+import { GitHubPullRequest, GitHubService } from "../github/GitHubService";
 import { createProvider, getProviderConfig } from "../llm/ProviderFactory";
 import { PromptBuilder } from "../llm/PromptBuilder";
 import { GitService } from "../git/GitService";
@@ -16,6 +17,12 @@ import { toFileRef } from "../../utils/refs";
 
 const GENERATED_BLOCK_START = "<!-- code-explainer:generated:start -->";
 const GENERATED_BLOCK_END = "<!-- code-explainer:generated:end -->";
+
+export class NoBranchChangesError extends Error {
+  public constructor() {
+    super("This branch has no edits compared with the base branch yet, so there is no PR description to generate.");
+  }
+}
 
 type DraftPayload = {
   title?: string;
@@ -45,6 +52,19 @@ export class PrDescriptionAnalysisService {
     private readonly githubService: GitHubService
   ) {}
 
+  public getAvailableStyles(config = vscode.workspace.getConfiguration("codeExplainer")): PrDescriptionStyleOption[] {
+    const styles = [...this.getBuiltInStyles(), ...this.getCustomStyles(config)];
+    const seen = new Set<string>();
+    return styles.filter((style) => {
+      if (seen.has(style.id)) {
+        return false;
+      }
+
+      seen.add(style.id);
+      return true;
+    });
+  }
+
   public async analyze(options: AnalyzeOptions = {}): Promise<PrDescriptionExplanation> {
     const folder = this.repoScanner.getWorkspaceFolder();
     const config = vscode.workspace.getConfiguration("codeExplainer");
@@ -55,17 +75,28 @@ export class PrDescriptionAnalysisService {
     }
 
     const baseBranch = config.get<string>("baseBranch", "main");
-    const style = this.resolveStyle(options.style, config);
+    const availableStyles = this.getAvailableStyles(config);
+    const selectedStyle = this.resolveStyle(availableStyles, options.style, config);
+    const style = selectedStyle.id;
     const customInstructions = options.customInstructions?.trim() ?? "";
     const defaultGuidelines = config.get<string>("prDescription.defaultGuidelines", "").trim();
     const defaultTemplate = config.get<string>("prDescription.defaultTemplate", "").trim();
+    const effectiveGuidelines = [defaultGuidelines, selectedStyle.guidelines?.trim() ?? ""]
+      .filter(Boolean)
+      .join("\n\n");
+    const effectiveTemplate = selectedStyle.template?.trim() || defaultTemplate;
 
-    const [branchName, changedFiles, diff, repository] = await Promise.all([
+    const [branchName, changedFiles, diff] = await Promise.all([
       git.getCurrentBranch(),
       git.getChangedFiles(baseBranch),
       git.getDiff(baseBranch),
-      this.githubService.resolveRepository(git),
     ]);
+
+    if (!changedFiles.length && !diff.trim()) {
+      throw new NoBranchChangesError();
+    }
+
+    const repository = await this.githubService.resolveRepository(git);
 
     const hasRemoteBranch = await git.hasRemoteBranch(repository.remoteName, branchName);
     const existingPr = await this.githubService.findOpenPullRequest(repository, branchName, true);
@@ -81,10 +112,11 @@ export class PrDescriptionAnalysisService {
       diff,
       existingTitle: existingPr?.title,
       existingBody,
-      style,
+      styleLabel: selectedStyle.label,
+      styleGuidance: selectedStyle.prompt?.trim() || this.getBuiltInStylePrompt(selectedStyle.id),
       customInstructions,
-      teamGuidelines: defaultGuidelines,
-      template: defaultTemplate,
+      teamGuidelines: effectiveGuidelines,
+      template: effectiveTemplate,
     });
     const payload = this.parseDraftPayload(await provider.generate(prompt));
 
@@ -112,6 +144,8 @@ export class PrDescriptionAnalysisService {
       draftTitle,
       draftBody,
       style,
+      styleLabel: selectedStyle.label,
+      availableStyles,
       customInstructions,
       branchName,
       baseBranch,
@@ -119,8 +153,8 @@ export class PrDescriptionAnalysisService {
       hasRemoteBranch,
       existingPrNumber: existingPr?.number,
       existingPrUrl: existingPr?.url,
-      defaultGuidelines,
-      defaultTemplate,
+      defaultGuidelines: effectiveGuidelines,
+      defaultTemplate: effectiveTemplate,
     };
   }
 
@@ -219,20 +253,94 @@ export class PrDescriptionAnalysisService {
   }
 
   private resolveStyle(
+    availableStyles: PrDescriptionStyleOption[],
     overrideStyle: PrDescriptionStyle | undefined,
     config: vscode.WorkspaceConfiguration
-  ): PrDescriptionStyle {
+  ): PrDescriptionStyleOption {
     const configStyle = config.get<string>("prDescription.defaultStyle", "manager");
-    const allowedStyles: PrDescriptionStyle[] = [
-      "business-stakeholder",
-      "code-collaborator",
-      "manager",
-      "other",
-    ];
+    const requestedStyle = overrideStyle ?? configStyle;
+    return availableStyles.find((style) => style.id === requestedStyle)
+      ?? availableStyles.find((style) => style.id === "manager")
+      ?? availableStyles[0];
+  }
 
-    return allowedStyles.includes(overrideStyle ?? (configStyle as PrDescriptionStyle))
-      ? (overrideStyle ?? (configStyle as PrDescriptionStyle))
-      : "manager";
+  private getBuiltInStyles(): PrDescriptionStyleOption[] {
+    return [
+      {
+        id: "business-stakeholder",
+        label: "Business stakeholder",
+        description: "Non-technical, impact-focused, and concise.",
+        prompt: this.getBuiltInStylePrompt("business-stakeholder"),
+        isBuiltIn: true,
+      },
+      {
+        id: "code-collaborator",
+        label: "Code collaborator",
+        description: "Technical and implementation-aware.",
+        prompt: this.getBuiltInStylePrompt("code-collaborator"),
+        isBuiltIn: true,
+      },
+      {
+        id: "manager",
+        label: "Manager",
+        description: "Semi-technical and delivery-focused.",
+        prompt: this.getBuiltInStylePrompt("manager"),
+        isBuiltIn: true,
+      },
+      {
+        id: "other",
+        label: "Other",
+        description: "Use your own custom instructions after generation.",
+        prompt: this.getBuiltInStylePrompt("other"),
+        isBuiltIn: true,
+      },
+    ];
+  }
+
+  private getBuiltInStylePrompt(styleId: string): string {
+    switch (styleId) {
+      case "business-stakeholder":
+        return "Business stakeholder: non-technical, impact-focused, concise, and outcome-oriented.";
+      case "code-collaborator":
+        return "Code collaborator: technical, implementation-aware, explicit about architecture, risks, and testing.";
+      case "manager":
+        return "Manager: semi-technical, balancing delivery impact with enough implementation detail to understand scope and risk.";
+      case "other":
+        return "Other: use the custom instructions as the primary guide and keep the tone professional.";
+      default:
+        return "Write a clear, professional pull request description that fits the requested audience.";
+    }
+  }
+
+  private getCustomStyles(config: vscode.WorkspaceConfiguration): PrDescriptionStyleOption[] {
+    const rawStyles = config.get<unknown[]>("prDescription.customStyles", []);
+    if (!Array.isArray(rawStyles)) {
+      return [];
+    }
+
+    return rawStyles.flatMap((style): PrDescriptionStyleOption[] => {
+      if (!style || typeof style !== "object") {
+        return [];
+      }
+
+      const candidate = style as Record<string, unknown>;
+      const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+      const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
+      const description = typeof candidate.description === "string" ? candidate.description.trim() : "";
+      if (!id || !label || !description) {
+        return [];
+      }
+
+      return [{
+        id,
+        label,
+        description,
+        prompt: typeof candidate.prompt === "string" ? candidate.prompt.trim() : "",
+        template: typeof candidate.template === "string" ? candidate.template.trim() : "",
+        guidelines: typeof candidate.guidelines === "string" ? candidate.guidelines.trim() : "",
+        isBuiltIn: false,
+      }];
+    });
   }
 
   private buildCards(options: {

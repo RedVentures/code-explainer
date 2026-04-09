@@ -779,17 +779,18 @@ export function renderHtml(title: string, result: AnalysisResult): string {
 }
 
 function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation): string {
-  const styleOptions: Array<{ value: PrDescriptionStyle; label: string }> = [
-    { value: "business-stakeholder", label: "Business stakeholder" },
-    { value: "code-collaborator", label: "Code collaborator" },
-    { value: "manager", label: "Manager" },
-    { value: "other", label: "Other" },
+  const styleOptions = result.availableStyles?.length ? result.availableStyles : [
+    { id: "business-stakeholder", label: "Business stakeholder", description: "Non-technical, impact-focused, and concise.", isBuiltIn: true },
+    { id: "code-collaborator", label: "Code collaborator", description: "Technical and implementation-aware.", isBuiltIn: true },
+    { id: "manager", label: "Manager", description: "Semi-technical and delivery-focused.", isBuiltIn: true },
+    { id: "other", label: "Other", description: "Use your own custom instructions after generation.", isBuiltIn: true },
   ];
   const statusLabel = {
     "no-pr": "No PR found",
     "existing-empty": "PR found with empty description",
     "existing-with-description": "PR found with existing description",
   }[result.prState];
+  const initialPreviewHtml = renderMarkdownPreviewHtml(result.draftBody);
 
   return `
     <!DOCTYPE html>
@@ -919,6 +920,77 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           textarea#pr-body {
             min-height: 360px;
           }
+          .draft-layout {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            align-items: start;
+            margin-top: 16px;
+          }
+          .preview {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(21, 36, 60, 0.85);
+            padding: 16px;
+            min-height: 360px;
+          }
+          .preview > :first-child {
+            margin-top: 0;
+          }
+          .preview h1,
+          .preview h2,
+          .preview h3,
+          .preview h4 {
+            margin: 18px 0 10px;
+            line-height: 1.25;
+          }
+          .preview h1 { font-size: 22px; }
+          .preview h2 { font-size: 18px; }
+          .preview h3 { font-size: 15px; }
+          .preview p,
+          .preview ul,
+          .preview ol,
+          .preview blockquote {
+            margin: 0 0 12px;
+          }
+          .preview ul,
+          .preview ol {
+            padding-left: 20px;
+          }
+          .preview li + li {
+            margin-top: 4px;
+          }
+          .preview code {
+            background: rgba(125, 211, 252, 0.12);
+            border-radius: 6px;
+            padding: 1px 5px;
+            font-size: 0.95em;
+          }
+          .preview pre {
+            background: rgba(7, 17, 31, 0.9);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px;
+            overflow: auto;
+            margin: 0 0 12px;
+          }
+          .preview pre code {
+            background: transparent;
+            padding: 0;
+          }
+          .preview hr {
+            border: 0;
+            border-top: 1px solid var(--border);
+            margin: 18px 0;
+          }
+          .preview blockquote {
+            border-left: 3px solid rgba(125, 211, 252, 0.35);
+            padding-left: 12px;
+            color: #c6d5ef;
+          }
+          .preview strong {
+            color: #ffffff;
+          }
           .hint {
             margin-top: 8px;
             color: var(--muted);
@@ -965,14 +1037,15 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           <div>${escapeHtml(result.headline)}</div>
           <div class="state-row">
             <span class="badge">${escapeHtml(statusLabel)}</span>
+            <span class="badge">${escapeHtml(result.styleLabel)}</span>
             <span class="badge ${result.hasRemoteBranch ? "success" : "warn"}">${result.hasRemoteBranch ? "Remote branch ready" : "Local branch only"}</span>
             ${result.existingPrUrl ? `<a class="badge" href="${escapeHtml(result.existingPrUrl)}" target="_blank" rel="noreferrer">PR #${escapeHtml(String(result.existingPrNumber ?? ""))}</a>` : ""}
           </div>
         </div>
         <div class="toolbar">
-          <button class="action" data-refresh="true">Refresh from Branch</button>
-          <button class="action" data-pr-regenerate="true">Regenerate</button>
-          <button class="action primary" data-pr-apply="true">Apply to GitHub</button>
+          <button type="button" class="action" id="pr-refresh-button" data-refresh="true">Refresh from Branch</button>
+          <button type="button" class="action" id="pr-regenerate-button" data-pr-regenerate="true">Regenerate</button>
+          <button type="button" class="action primary" id="pr-apply-button" data-pr-apply="true">Apply to GitHub</button>
         </div>
         <section class="editor">
           <div class="grid">
@@ -980,7 +1053,7 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               <span class="field-label">Description Style</span>
               <select id="pr-style">
                 ${styleOptions
-                  .map((option) => `<option value="${option.value}"${option.value === result.style ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
+                  .map((option) => `<option value="${option.id}"${option.id === result.style ? " selected" : ""}>${escapeHtml(option.label)}${option.isBuiltIn ? "" : " (Custom)"}</option>`)
                   .join("")}
               </select>
             </label>
@@ -994,10 +1067,16 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             <textarea id="pr-custom-instructions" placeholder="Add one-off guidance for this PR draft.">${escapeHtml(result.customInstructions)}</textarea>
           </label>
           <div class="hint">Panel instructions override saved defaults when you regenerate.</div>
-          <label class="field" style="margin-top:16px;">
-            <span class="field-label">PR Description Draft</span>
-            <textarea id="pr-body">${escapeHtml(result.draftBody)}</textarea>
-          </label>
+          <div class="draft-layout">
+            <label class="field">
+              <span class="field-label">PR Description Draft</span>
+              <textarea id="pr-body">${escapeHtml(result.draftBody)}</textarea>
+            </label>
+            <div class="field">
+              <span class="field-label">Markdown Preview</span>
+              <div class="preview" id="pr-preview">${initialPreviewHtml}</div>
+            </div>
+          </div>
         </section>
         ${renderCards(result)}
         <script>
@@ -1015,6 +1094,149 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               style: style instanceof HTMLSelectElement ? style.value : "manager",
               customInstructions: customInstructions instanceof HTMLTextAreaElement ? customInstructions.value : "",
             };
+          }
+
+          function escapePreviewHtml(value) {
+            return value
+              .replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;");
+          }
+
+          function renderInlineMarkdown(text) {
+            return text
+              .replace(/\`([^\`]+)\`/g, "<code>$1</code>")
+              .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+              .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+              .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+          }
+
+          function renderMarkdownPreview(markdown) {
+            const preview = document.getElementById("pr-preview");
+            if (!(preview instanceof HTMLElement)) {
+              return;
+            }
+
+            const escaped = escapePreviewHtml(markdown || "");
+            const lines = escaped.split(/\\r?\\n/);
+            const html = [];
+            let inList = false;
+            let listType = "ul";
+            let inCodeBlock = false;
+            let codeLines = [];
+
+            function closeList() {
+              if (inList) {
+                html.push(listType === "ol" ? "</ol>" : "</ul>");
+                inList = false;
+              }
+            }
+
+            function closeCodeBlock() {
+              if (inCodeBlock) {
+                html.push("<pre><code>" + codeLines.join("\\n") + "</code></pre>");
+                inCodeBlock = false;
+                codeLines = [];
+              }
+            }
+
+            for (const rawLine of lines) {
+              const line = rawLine.trimEnd();
+              const trimmed = line.trim();
+
+              if (trimmed.startsWith("\`\`\`")) {
+                closeList();
+                if (inCodeBlock) {
+                  closeCodeBlock();
+                } else {
+                  inCodeBlock = true;
+                  codeLines = [];
+                }
+                continue;
+              }
+
+              if (inCodeBlock) {
+                codeLines.push(line);
+                continue;
+              }
+
+              if (!trimmed) {
+                closeList();
+                html.push("");
+                continue;
+              }
+
+              const headingMatch = trimmed.match(/^(#{1,4})\\s+(.+)$/);
+              if (headingMatch) {
+                closeList();
+                const level = headingMatch[1].length;
+                html.push("<h" + level + ">" + renderInlineMarkdown(headingMatch[2]) + "</h" + level + ">");
+                continue;
+              }
+
+              if (/^---+$/.test(trimmed)) {
+                closeList();
+                html.push("<hr />");
+                continue;
+              }
+
+              const orderedMatch = trimmed.match(/^\\d+\\.\\s+(.+)$/);
+              const unorderedMatch = trimmed.match(/^[-*]\\s+(.+)$/);
+              if (orderedMatch || unorderedMatch) {
+                const nextListType = orderedMatch ? "ol" : "ul";
+                if (!inList || listType !== nextListType) {
+                  closeList();
+                  listType = nextListType;
+                  html.push(listType === "ol" ? "<ol>" : "<ul>");
+                  inList = true;
+                }
+
+                html.push("<li>" + renderInlineMarkdown((orderedMatch || unorderedMatch)[1]) + "</li>");
+                continue;
+              }
+
+              closeList();
+
+              if (trimmed.startsWith("&gt;")) {
+                html.push("<blockquote>" + renderInlineMarkdown(trimmed.replace(/^&gt;\\s?/, "")) + "</blockquote>");
+                continue;
+              }
+
+              html.push("<p>" + renderInlineMarkdown(trimmed) + "</p>");
+            }
+
+            closeList();
+            closeCodeBlock();
+            preview.innerHTML = html.join("");
+          }
+
+          const bodyElement = document.getElementById("pr-body");
+          if (bodyElement instanceof HTMLTextAreaElement) {
+            renderMarkdownPreview(bodyElement.value);
+            bodyElement.addEventListener("input", () => {
+              renderMarkdownPreview(bodyElement.value);
+            });
+          }
+
+          const refreshButton = document.getElementById("pr-refresh-button");
+          if (refreshButton instanceof HTMLButtonElement) {
+            refreshButton.addEventListener("click", () => {
+              vscode.postMessage({ type: "refresh" });
+            });
+          }
+
+          const regenerateButton = document.getElementById("pr-regenerate-button");
+          if (regenerateButton instanceof HTMLButtonElement) {
+            regenerateButton.addEventListener("click", () => {
+              vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
+            });
+          }
+
+          const applyButton = document.getElementById("pr-apply-button");
+          if (applyButton instanceof HTMLButtonElement) {
+            applyButton.addEventListener("click", () => {
+              vscode.postMessage({ type: "prApply", ...readDraftState() });
+            });
           }
 
           document.addEventListener("click", (event) => {
@@ -1052,6 +1274,115 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
       </body>
     </html>
   `;
+}
+
+function renderMarkdownPreviewHtml(markdown: string): string {
+  if (!markdown.trim()) {
+    return `<p><em>Preview will appear here when the PR description has content.</em></p>`;
+  }
+
+  const escapePreviewHtml = (value: string) => value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+  const renderInlineMarkdown = (text: string) => text
+    .replace(/\`([^\`]+)\`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+
+  const escaped = escapePreviewHtml(markdown);
+  const lines = escaped.split(/\r?\n/);
+  const html: string[] = [];
+  let inList = false;
+  let listType: "ul" | "ol" = "ul";
+  let inCodeBlock = false;
+  let codeLines: string[] = [];
+
+  const closeList = () => {
+    if (inList) {
+      html.push(listType === "ol" ? "</ol>" : "</ul>");
+      inList = false;
+    }
+  };
+
+  const closeCodeBlock = () => {
+    if (inCodeBlock) {
+      html.push(`<pre><code>${codeLines.join("\n")}</code></pre>`);
+      inCodeBlock = false;
+      codeLines = [];
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      closeList();
+      if (inCodeBlock) {
+        closeCodeBlock();
+      } else {
+        inCodeBlock = true;
+        codeLines = [];
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    if (!trimmed) {
+      closeList();
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      closeList();
+      const level = headingMatch[1].length;
+      html.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    if (/^---+$/.test(trimmed)) {
+      closeList();
+      html.push("<hr />");
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/);
+    const unorderedMatch = trimmed.match(/^[-*]\s+(.+)$/);
+    if (orderedMatch || unorderedMatch) {
+      const nextListType: "ul" | "ol" = orderedMatch ? "ol" : "ul";
+      if (!inList || listType !== nextListType) {
+        closeList();
+        listType = nextListType;
+        html.push(listType === "ol" ? "<ol>" : "<ul>");
+        inList = true;
+      }
+
+      html.push(`<li>${renderInlineMarkdown((orderedMatch || unorderedMatch)![1])}</li>`);
+      continue;
+    }
+
+    closeList();
+
+    if (trimmed.startsWith("&gt;")) {
+      html.push(`<blockquote>${renderInlineMarkdown(trimmed.replace(/^&gt;\s?/, ""))}</blockquote>`);
+      continue;
+    }
+
+    html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
+  }
+
+  closeList();
+  closeCodeBlock();
+
+  return html.join("") || `<p><em>Preview will appear here when the PR description has content.</em></p>`;
 }
 
 export function renderLoadingHtml(title: string, message: string): string {

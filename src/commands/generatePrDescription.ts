@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
-import { PrDescriptionExplanation, PrDescriptionStyle } from "../models/types";
-import { PrDescriptionAnalysisService } from "../services/analysis/PrDescriptionAnalysisService";
+import { PrDescriptionExplanation, PrDescriptionStyle, PrDescriptionStyleOption } from "../models/types";
+import { NoBranchChangesError, PrDescriptionAnalysisService } from "../services/analysis/PrDescriptionAnalysisService";
 import { ResultsPanel } from "../ui/webview/panel";
 import { openFileRef } from "./shared";
 
@@ -25,12 +25,20 @@ export function createGeneratePrDescriptionCommand(
   analysisService: PrDescriptionAnalysisService
 ) {
   return async () => {
+    const initialStyle = await promptForInitialStyle(analysisService.getAvailableStyles());
+    if (!initialStyle) {
+      return;
+    }
+
     const renderResult = (result: PrDescriptionExplanation) => {
       panel.show(result, {
         onAction: () => undefined,
         onFileRef: (fileRef) => void openFileRef(fileRef),
         onRefresh: () => {
-          void runAnalysis();
+          void runAnalysis({
+            style: result.style,
+            customInstructions: result.customInstructions,
+          });
         },
         onMessage: (message) => {
           void handlePanelMessage(message as DraftPanelMessage, result, renderResult);
@@ -40,8 +48,17 @@ export function createGeneratePrDescriptionCommand(
 
     const runAnalysis = async (options?: { style?: PrDescriptionStyle; customInstructions?: string }) => {
       panel.showLoading("Generate PR Description", "Reviewing the current branch and preparing a PR description draft.");
-      const result = await analysisService.analyze(options);
-      renderResult(result);
+      try {
+        const result = await analysisService.analyze(options);
+        renderResult(result);
+      } catch (error) {
+        if (error instanceof NoBranchChangesError) {
+          void vscode.window.showInformationMessage(error.message);
+          return;
+        }
+
+        throw error;
+      }
     };
 
     const handlePanelMessage = async (
@@ -101,6 +118,21 @@ export function createGeneratePrDescriptionCommand(
       }
     };
 
-    await runAnalysis();
+    await runAnalysis({ style: initialStyle });
   };
+}
+
+async function promptForInitialStyle(styles: PrDescriptionStyleOption[]): Promise<PrDescriptionStyle | undefined> {
+  const items = styles.map((style) => ({
+    label: style.label,
+    description: style.description,
+    detail: style.isBuiltIn ? "Built-in style" : "Custom reusable style",
+    style: style.id,
+  }));
+  const selection = await vscode.window.showQuickPick(items, {
+    title: "Choose a PR description style",
+    placeHolder: "Pick the audience/tone before generating the first draft.",
+  });
+
+  return selection?.style;
 }

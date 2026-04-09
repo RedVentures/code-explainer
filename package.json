@@ -129,14 +129,8 @@
         },
         "codeExplainer.prDescription.defaultStyle": {
           "type": "string",
-          "enum": [
-            "business-stakeholder",
-            "code-collaborator",
-            "manager",
-            "other"
-          ],
           "default": "manager",
-          "description": "Default audience/style for generated PR descriptions."
+          "description": "Default style id for generated PR descriptions. Built-in ids are business-stakeholder, code-collaborator, manager, and other, and you can also point this to a custom reusable style."
         },
         "codeExplainer.prDescription.defaultGuidelines": {
           "type": "string",
@@ -147,6 +141,45 @@
           "type": "string",
           "default": "",
           "description": "Optional default markdown template or preferred section structure for generated PR descriptions."
+        },
+        "codeExplainer.prDescription.customStyles": {
+          "type": "array",
+          "default": [],
+          "description": "Reusable custom PR description styles with their own prompt, template, and optional guidelines.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "description"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable unique id for the style, used in settings and panel state."
+              },
+              "label": {
+                "type": "string",
+                "description": "Display name shown in the style picker."
+              },
+              "description": {
+                "type": "string",
+                "description": "Short helper text shown when choosing a style."
+              },
+              "prompt": {
+                "type": "string",
+                "description": "Audience/tone guidance to inject into PR generation."
+              },
+              "template": {
+                "type": "string",
+                "description": "Optional markdown structure to prefer for this style."
+              },
+              "guidelines": {
+                "type": "string",
+                "description": "Optional style-specific team rules or reminders."
+              }
+            }
+          }
         },
         "codeExplainer.openai.apiKey": {
           "type": "string",
