@@ -27,6 +27,19 @@ export class RepoScanner {
     };
   }
 
+  public async scanDirectory(directoryPath: string, maxFiles: number): Promise<string[]> {
+    const folder = this.getWorkspaceFolder();
+    const relativePath = path.relative(folder.uri.fsPath, directoryPath);
+
+    // Scan only files within the specific directory
+    const pattern = `${relativePath}/**/*`;
+    const files = await vscode.workspace.findFiles(pattern, "**/{node_modules,.git,out}/**", maxFiles);
+
+    return files
+      .map((uri) => path.relative(folder.uri.fsPath, uri.fsPath))
+      .sort();
+  }
+
   public getWorkspaceFolder(): vscode.WorkspaceFolder {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
