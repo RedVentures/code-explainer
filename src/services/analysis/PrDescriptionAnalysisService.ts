@@ -20,7 +20,7 @@ const GENERATED_BLOCK_END = "<!-- code-explainer:generated:end -->";
 
 export class NoBranchChangesError extends Error {
   public constructor() {
-    super("This branch has no edits compared with the base branch yet, so there is no PR description to generate.");
+    super("No committed branch changes were found compared with the base branch. Commit your work first, then generate the PR description.");
   }
 }
 

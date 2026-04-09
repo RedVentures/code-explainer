@@ -1042,6 +1042,7 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           <button type="button" class="action" id="pr-refresh-button" data-refresh="true">Refresh from Branch</button>
           <button type="button" class="action" id="pr-regenerate-button" data-pr-regenerate="true">Regenerate</button>
           <button type="button" class="action primary" id="pr-apply-button" data-pr-apply="true">Apply to GitHub</button>
+          <span class="badge" id="pr-script-status">Script pending</span>
         </div>
         <section class="editor">
           <div class="grid">
@@ -1070,14 +1071,16 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             </label>
             <section class="preview-panel">
               <h3>Markdown Preview</h3>
-              <div class="preview-body" id="pr-preview"></div>
+              <div class="preview-body" id="pr-preview">${initialPreviewHtml}</div>
             </section>
           </div>
         </section>
         ${renderCards(result)}
         <script>
+          const vscode = acquireVsCodeApi();
           const scriptStatus = document.getElementById("pr-script-status");
-          const setScriptStatus = (text, state) => {
+
+          function setScriptStatus(text, state) {
             if (!(scriptStatus instanceof HTMLElement)) {
               return;
             }
@@ -1087,15 +1090,9 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             if (state) {
               scriptStatus.classList.add(state);
             }
-          };
+          }
 
-          try {
-            setScriptStatus("Booting…");
-            const vscode = acquireVsCodeApi();
-            console.log("[Code Explainer] PR description webview script booted");
-            setScriptStatus("Script ready", "success");
-
-            function readDraftState() {
+          function readDraftState() {
             const title = document.getElementById("pr-title");
             const body = document.getElementById("pr-body");
             const style = document.getElementById("pr-style");
@@ -1107,9 +1104,9 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               style: style instanceof HTMLSelectElement ? style.value : "manager",
               customInstructions: customInstructions instanceof HTMLTextAreaElement ? customInstructions.value : "",
             };
-            }
+          }
 
-            function escapePreviewHtml(value) {
+          function escapePreviewHtml(value) {
             return value
               .replaceAll("&", "&amp;")
               .replaceAll("<", "&lt;")
@@ -1117,157 +1114,15 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           }
 
           function renderInlineMarkdown(text) {
-            return text
-              .replace(/\`([^\`]+)\`/g, "<code>$1</code>")
-              .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-              .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-              .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
-          }
-
-          function renderMarkdownPreview(markdown) {
-            const preview = document.getElementById("pr-preview");
-            if (!(preview instanceof HTMLElement)) {
-              return;
-            }
-
-            const escaped = escapePreviewHtml(markdown || "");
-            const lines = escaped.split(/\\r?\\n/);
-            const html = [];
-            let inList = false;
-            let listType = "ul";
-            let inCodeBlock = false;
-            let codeLines = [];
-
-            function closeList() {
-              if (inList) {
-                html.push(listType === "ol" ? "</ol>" : "</ul>");
-                inList = false;
-              }
-            }
-
-            function closeCodeBlock() {
-              if (inCodeBlock) {
-                html.push("<pre><code>" + codeLines.join("\\n") + "</code></pre>");
-                inCodeBlock = false;
-                codeLines = [];
-              }
-            }
-
-            for (const rawLine of lines) {
-              const line = rawLine.trimEnd();
-              const trimmed = line.trim();
-
-              if (trimmed.startsWith("\`\`\`")) {
-                closeList();
-                if (inCodeBlock) {
-                  closeCodeBlock();
-                } else {
-                  inCodeBlock = true;
-                  codeLines = [];
-                }
-                continue;
-              }
-
-              if (inCodeBlock) {
-                codeLines.push(line);
-                continue;
-              }
-
-              if (!trimmed) {
-                closeList();
-                html.push("");
-                continue;
-              }
-
-              const headingMatch = trimmed.match(/^(#{1,4})\\s+(.+)$/);
-              if (headingMatch) {
-                closeList();
-                const level = headingMatch[1].length;
-                html.push("<h" + level + ">" + renderInlineMarkdown(headingMatch[2]) + "</h" + level + ">");
-                continue;
-              }
-
-              if (/^---+$/.test(trimmed)) {
-                closeList();
-                html.push("<hr />");
-                continue;
-              }
-
-              const orderedMatch = trimmed.match(/^\\d+\\.\\s+(.+)$/);
-              const unorderedMatch = trimmed.match(/^[-*]\\s+(.+)$/);
-              if (orderedMatch || unorderedMatch) {
-                const nextListType = orderedMatch ? "ol" : "ul";
-                if (!inList || listType !== nextListType) {
-                  closeList();
-                  listType = nextListType;
-                  html.push(listType === "ol" ? "<ol>" : "<ul>");
-                  inList = true;
-                }
-
-                html.push("<li>" + renderInlineMarkdown((orderedMatch || unorderedMatch)[1]) + "</li>");
-                continue;
-              }
-
-              closeList();
-
-              if (trimmed.startsWith("&gt;")) {
-                html.push("<blockquote>" + renderInlineMarkdown(trimmed.replace(/^&gt;\\s?/, "")) + "</blockquote>");
-                continue;
-              }
-
-              html.push("<p>" + renderInlineMarkdown(trimmed) + "</p>");
-            }
-
-            closeList();
-            closeCodeBlock();
-            preview.innerHTML = html.join("");
-          }
-
-          const bodyElement = document.getElementById("pr-body");
-          if (bodyElement instanceof HTMLTextAreaElement) {
-            renderMarkdownPreview(bodyElement.value);
-            bodyElement.addEventListener("input", () => {
-              renderMarkdownPreview(bodyElement.value);
-            });
-          }
-
-          const refreshButton = document.getElementById("pr-refresh-button");
-          if (refreshButton instanceof HTMLButtonElement) {
-            refreshButton.addEventListener("click", () => {
-              vscode.postMessage({ type: "refresh" });
-            });
-          }
-
-          const regenerateButton = document.getElementById("pr-regenerate-button");
-          if (regenerateButton instanceof HTMLButtonElement) {
-            regenerateButton.addEventListener("click", () => {
-              vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
-            });
-          }
-
-          const applyButton = document.getElementById("pr-apply-button");
-          if (applyButton instanceof HTMLButtonElement) {
-            applyButton.addEventListener("click", () => {
-              vscode.postMessage({ type: "prApply", ...readDraftState() });
-            });
-          }
-
-          document.addEventListener("click", (event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) {
-              return;
-            }
-
-            function renderInlineMarkdown(text) {
             const backtick = String.fromCharCode(96);
             return text
               .replace(new RegExp(backtick + "([^" + backtick + "]+)" + backtick, "g"), "<code>$1</code>")
-              .replace(new RegExp("\\\\*\\\\*([^*]+)\\\\*\\\\*", "g"), "<strong>$1</strong>")
-              .replace(new RegExp("\\\\*([^*]+)\\\\*", "g"), "<em>$1</em>")
-              .replace(new RegExp("\\\\[([^\\\\]]+)\\\\]\\\\(([^)]+)\\\\)", "g"), '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
-            }
+              .replace(new RegExp("\\*\\*([^*]+)\\*\\*", "g"), "<strong>$1</strong>")
+              .replace(new RegExp("\\*([^*]+)\\*", "g"), "<em>$1</em>")
+              .replace(new RegExp("\\[([^\\]]+)\\]\\(([^)]+)\\)", "g"), '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+          }
 
-            function renderMarkdownPreview(markdown) {
+          function renderMarkdownPreview(markdown) {
             const preview = document.getElementById("pr-preview");
             if (!(preview instanceof HTMLElement)) {
               return;
@@ -1348,8 +1203,7 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
                   inList = true;
                 }
 
-                const listMatch = orderedMatch || unorderedMatch;
-                html.push("<li>" + renderInlineMarkdown(listMatch ? listMatch[1] : "") + "</li>");
+                html.push("<li>" + renderInlineMarkdown((orderedMatch || unorderedMatch)[1]) + "</li>");
                 continue;
               }
 
@@ -1366,73 +1220,73 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
             closeList();
             closeCodeBlock();
             preview.innerHTML = html.join("");
-            }
+          }
 
-            const bodyElement = document.getElementById("pr-body");
-            if (bodyElement instanceof HTMLTextAreaElement) {
+          function postRefresh() {
+            vscode.postMessage({ type: "refresh" });
+          }
+
+          function postRegenerate() {
+            vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
+          }
+
+          function postApply() {
+            vscode.postMessage({ type: "prApply", ...readDraftState() });
+          }
+
+          const refreshButton = document.getElementById("pr-refresh-button");
+          if (refreshButton instanceof HTMLButtonElement) {
+            refreshButton.addEventListener("click", () => {
+              postRefresh();
+            });
+          }
+
+          const regenerateButton = document.getElementById("pr-regenerate-button");
+          if (regenerateButton instanceof HTMLButtonElement) {
+            regenerateButton.addEventListener("click", () => {
+              postRegenerate();
+            });
+          }
+
+          const applyButton = document.getElementById("pr-apply-button");
+          if (applyButton instanceof HTMLButtonElement) {
+            applyButton.addEventListener("click", () => {
+              postApply();
+            });
+          }
+
+          const bodyElement = document.getElementById("pr-body");
+          if (bodyElement instanceof HTMLTextAreaElement) {
+            try {
               renderMarkdownPreview(bodyElement.value);
-              bodyElement.addEventListener("input", () => {
+            } catch (error) {
+              console.error("[Code Explainer] Initial preview render failed", error);
+            }
+
+            bodyElement.addEventListener("input", () => {
+              try {
                 renderMarkdownPreview(bodyElement.value);
-              });
-            }
-
-            const refreshButton = document.getElementById("pr-refresh-button");
-            if (refreshButton instanceof HTMLButtonElement) {
-              refreshButton.addEventListener("click", () => {
-                vscode.postMessage({ type: "refresh" });
-              });
-            }
-
-            const regenerateButton = document.getElementById("pr-regenerate-button");
-            if (regenerateButton instanceof HTMLButtonElement) {
-              regenerateButton.addEventListener("click", () => {
-                vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
-              });
-            }
-
-            const applyButton = document.getElementById("pr-apply-button");
-            if (applyButton instanceof HTMLButtonElement) {
-              applyButton.addEventListener("click", () => {
-                vscode.postMessage({ type: "prApply", ...readDraftState() });
-              });
-            }
-
-            document.addEventListener("click", (event) => {
-              const target = event.target;
-              if (!(target instanceof Element)) {
-                return;
-              }
-
-              const refreshElement = target.closest("[data-refresh]");
-              if (refreshElement) {
-                vscode.postMessage({ type: "refresh" });
-                return;
-              }
-
-              const regenerateElement = target.closest("[data-pr-regenerate]");
-              if (regenerateElement) {
-                vscode.postMessage({ type: "prRegenerate", ...readDraftState() });
-                return;
-              }
-
-              const applyElement = target.closest("[data-pr-apply]");
-              if (applyElement) {
-                vscode.postMessage({ type: "prApply", ...readDraftState() });
-                return;
-              }
-
-              const fileRefElement = target.closest("[data-file-ref]");
-              const fileRef = fileRefElement ? fileRefElement.getAttribute("data-file-ref") : null;
-              if (fileRef) {
-                event.preventDefault();
-                vscode.postMessage({ type: "fileRef", fileRef });
+              } catch (error) {
+                console.error("[Code Explainer] Live preview render failed", error);
               }
             });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.error("[Code Explainer] PR description webview failed to boot", error);
-            setScriptStatus("Script error: " + message, "warn");
           }
+
+          document.addEventListener("click", (event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) {
+              return;
+            }
+
+            const fileRefElement = target.closest("[data-file-ref]");
+            const fileRef = fileRefElement ? fileRefElement.getAttribute("data-file-ref") : null;
+            if (fileRef) {
+              event.preventDefault();
+              vscode.postMessage({ type: "fileRef", fileRef });
+            }
+          });
+
+          setScriptStatus("Script ready", "success");
         </script>
       </body>
     </html>

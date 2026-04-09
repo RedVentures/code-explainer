@@ -126,11 +126,6 @@ export function createGeneratePrDescriptionCommand(
       }
     };
 
-    const initialStyle = await promptForInitialStyle();
-    if (!initialStyle) {
-      return;
-    }
-
     await runAnalysis({ style: initialStyle });
   };
 }
@@ -152,38 +147,13 @@ function restoreDraftResult(
   return result;
 }
 
-function promptForInitialStyle(): Thenable<PrDescriptionStyle | undefined> {
-  const items: Array<{
-    label: string;
-    description: string;
-    detail: string;
-    style: PrDescriptionStyle;
-  }> = [
-    {
-      label: "Business stakeholder",
-      description: "Outcome-focused language for partners and non-technical reviewers.",
-      detail: "Best when the PR description should emphasize impact, rollout, and risk.",
-      style: "business-stakeholder",
-    },
-    {
-      label: "Code collaborator",
-      description: "Technical but readable language for engineers reviewing the change.",
-      detail: "Best when teammates need implementation context without reading the whole diff.",
-      style: "code-collaborator",
-    },
-    {
-      label: "Manager",
-      description: "High-level explanation of what changed and why it matters.",
-      detail: "Best default for lightweight status updates and stakeholder visibility.",
-      style: "manager",
-    },
-    {
-      label: "Other",
-      description: "Start from a flexible base and refine with custom instructions.",
-      detail: "Best when the audience is unusual or the tone needs to be highly customized.",
-      style: "other",
-    },
-  ];
+function promptForInitialStyle(styles: PrDescriptionStyleOption[]): Thenable<PrDescriptionStyle | undefined> {
+  const items = styles.map((style) => ({
+    label: style.label,
+    description: style.description,
+    detail: style.isBuiltIn ? "Built-in style" : "Custom reusable style",
+    style: style.id,
+  }));
 
   return vscode.window.showQuickPick(items, {
     title: "Choose a PR description style",
