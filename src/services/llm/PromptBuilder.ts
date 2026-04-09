@@ -143,6 +143,8 @@ export class PromptBuilder {
         'Use this schema: {"title": string, "generatedBody": string}.',
         "The generatedBody will be inserted into a managed section inside the full PR description, so do not mention markers, automation, or implementation notes about the tool itself.",
         "Default shape: a short executive summary followed by clear markdown sections.",
+        "The selected audience/style is a hard requirement. Vocabulary, level of detail, and section emphasis must noticeably match that audience.",
+        "If the user changes style and regenerates, rewrite the draft to fit the new audience rather than reusing the prior tone.",
         "Be accurate to the supplied diff. If something is inferred, say so carefully.",
         "Keep the language readable and specific rather than generic release-note filler.",
       ].join(" "),
