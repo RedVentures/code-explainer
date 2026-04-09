@@ -26,14 +26,12 @@ If the branch has no edits compared with the base branch, the extension will not
 
 ### How to Customize PR Style
 
-You can customize PR generation in two ways:
+Built-in styles:
 
-- pick a style for the current run:
-  - `Business stakeholder`
-  - `Code collaborator`
-  - `Manager`
-  - `Other`
-- add one-off custom instructions in the PR description panel before regenerating
+- `Business stakeholder`: non-technical, impact-focused, concise, and outcome-oriented
+- `Code collaborator`: technical, implementation-aware, explicit about architecture, risks, and testing
+- `Manager`: semi-technical, balancing delivery impact with implementation detail
+- `Other`: starts from a neutral professional tone and leans on your custom instructions
 
 You can also set defaults in editor settings:
 
@@ -46,6 +44,32 @@ You can also set defaults in editor settings:
 ```
 
 Per-run instructions from the panel override the saved defaults for that generation pass.
+
+#### Reusable Custom Styles
+
+Add reusable styles in settings when your team wants a specific prompt and template to show up in the picker alongside the built-in options:
+
+```json
+{
+  "codeExplainer.prDescription.defaultStyle": "release-notes",
+  "codeExplainer.prDescription.customStyles": [
+    {
+      "id": "release-notes",
+      "label": "Release notes",
+      "description": "Customer-facing summary with launch-ready language.",
+      "prompt": "Write for customer-facing release readers. Emphasize end-user value, rollout notes, and any support impact.",
+      "template": "## Summary\n## Customer Impact\n## Rollout Notes\n## Testing",
+      "guidelines": "Keep the tone polished and avoid internal project jargon."
+    }
+  ]
+}
+```
+
+Each custom style can define:
+
+- `prompt`: reusable audience and tone guidance
+- `template`: preferred markdown section structure
+- `guidelines`: extra team rules layered on top of the global default guidelines
 
 ## Development
 

@@ -776,12 +776,7 @@ export function renderHtml(title: string, result: AnalysisResult): string {
 }
 
 function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation): string {
-  const styleOptions: Array<{ value: PrDescriptionStyle; label: string }> = [
-    { value: "business-stakeholder", label: "Business stakeholder" },
-    { value: "code-collaborator", label: "Code collaborator" },
-    { value: "manager", label: "Manager" },
-    { value: "other", label: "Other" },
-  ];
+  const styleOptions = result.availableStyles;
   const statusLabel = {
     "no-pr": "No PR found",
     "existing-empty": "PR found with empty description",
@@ -1033,6 +1028,7 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
           <div>${escapeHtml(result.headline)}</div>
           <div class="state-row">
             <span class="badge">${escapeHtml(statusLabel)}</span>
+            <span class="badge">${escapeHtml(result.styleLabel)}</span>
             <span class="badge ${result.hasRemoteBranch ? "success" : "warn"}">${result.hasRemoteBranch ? "Remote branch ready" : "Local branch only"}</span>
             ${result.existingPrUrl ? `<a class="badge" href="${escapeHtml(result.existingPrUrl)}" target="_blank" rel="noreferrer">PR #${escapeHtml(String(result.existingPrNumber ?? ""))}</a>` : ""}
           </div>
@@ -1048,7 +1044,7 @@ function renderPrDescriptionHtml(title: string, result: PrDescriptionExplanation
               <span class="field-label">Description Style</span>
               <select id="pr-style">
                 ${styleOptions
-                  .map((option) => `<option value="${option.value}"${option.value === result.style ? " selected" : ""}>${escapeHtml(option.label)}</option>`)
+                  .map((option) => `<option value="${option.id}"${option.id === result.style ? " selected" : ""}>${escapeHtml(option.label)}${option.isBuiltIn ? "" : " (Custom)"}</option>`)
                   .join("")}
               </select>
             </label>

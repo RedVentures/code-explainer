@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { PrDescriptionExplanation, PrDescriptionStyle } from "../models/types";
+import { PrDescriptionExplanation, PrDescriptionStyle, PrDescriptionStyleOption } from "../models/types";
 import { NoBranchChangesError, PrDescriptionAnalysisService } from "../services/analysis/PrDescriptionAnalysisService";
 import { ResultsPanel } from "../ui/webview/panel";
 import { openFileRef } from "./shared";
@@ -25,7 +25,7 @@ export function createGeneratePrDescriptionCommand(
   analysisService: PrDescriptionAnalysisService
 ) {
   return async () => {
-    const initialStyle = await promptForInitialStyle();
+    const initialStyle = await promptForInitialStyle(analysisService.getAvailableStyles());
     if (!initialStyle) {
       return;
     }
@@ -122,30 +122,13 @@ export function createGeneratePrDescriptionCommand(
   };
 }
 
-async function promptForInitialStyle(): Promise<PrDescriptionStyle | undefined> {
-  const items: Array<{ label: string; description: string; style: PrDescriptionStyle }> = [
-    {
-      label: "Business stakeholder",
-      description: "Non-technical, impact-focused, and concise.",
-      style: "business-stakeholder",
-    },
-    {
-      label: "Code collaborator",
-      description: "Technical and implementation-aware.",
-      style: "code-collaborator",
-    },
-    {
-      label: "Manager",
-      description: "Semi-technical and delivery-focused.",
-      style: "manager",
-    },
-    {
-      label: "Other",
-      description: "Use your own custom instructions after generation.",
-      style: "other",
-    },
-  ];
-
+async function promptForInitialStyle(styles: PrDescriptionStyleOption[]): Promise<PrDescriptionStyle | undefined> {
+  const items = styles.map((style) => ({
+    label: style.label,
+    description: style.description,
+    detail: style.isBuiltIn ? "Built-in style" : "Custom reusable style",
+    style: style.id,
+  }));
   const selection = await vscode.window.showQuickPick(items, {
     title: "Choose a PR description style",
     placeHolder: "Pick the audience/tone before generating the first draft.",
