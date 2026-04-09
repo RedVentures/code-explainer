@@ -45,7 +45,7 @@ export class FlowAnalysisService {
     private readonly promptBuilder: PromptBuilder
   ) {}
 
-  public async analyze(): Promise<FlowExplanation> {
+  public async analyze(directoryPath?: string): Promise<FlowExplanation> {
     const folder = this.repoScanner.getWorkspaceFolder();
     const config = vscode.workspace.getConfiguration("codeExplainer");
     const maxFiles = config.get<number>("maxFilesInContext", 30);
@@ -55,15 +55,38 @@ export class FlowAnalysisService {
       throw new Error("The current workspace is not a git repository.");
     }
 
-    const [repoContext, branchName] = await Promise.all([
-      this.repoScanner.scan(maxFiles),
-      git.getCurrentBranch(),
-    ]);
+    const branchName = await git.getCurrentBranch();
+
+    let repoContext;
+    let scopeDescription = "Current branch";
+
+    if (directoryPath) {
+      // Scan only the specific directory
+      const dirFiles = await this.repoScanner.scanDirectory(directoryPath, maxFiles);
+      const fullRepoContext = await this.repoScanner.scan(50);
+
+      // Create a limited context focused on the directory
+      repoContext = {
+        workspaceName: folder.name,
+        rootPath: folder.uri.fsPath,
+        files: dirFiles,
+        topLevelEntries: fullRepoContext.topLevelEntries,
+        manifests: fullRepoContext.manifests,
+        readmes: dirFiles.filter((file) => /(^|\/)(readme|docs)(\.|$)/i.test(file)),
+      };
+
+      const relativePath = directoryPath.replace(folder.uri.fsPath, "").replace(/^\//, "");
+      scopeDescription = `${relativePath} directory`;
+    } else {
+      // Scan the whole repo
+      repoContext = await this.repoScanner.scan(maxFiles);
+    }
 
     const provider = createProvider(getProviderConfig());
     const prompt = this.promptBuilder.buildBranchFlowPrompt({
       repo: repoContext,
       branchName,
+      directoryScope: directoryPath ? scopeDescription : undefined,
     });
 
     const payload = this.parsePayload(await provider.generate(prompt), folder.uri.fsPath);

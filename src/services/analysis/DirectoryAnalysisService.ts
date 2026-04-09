@@ -37,6 +37,11 @@ export class DirectoryAnalysisService {
     });
 
     const markdown = await provider.generate(prompt);
-    return toRepoSummary(markdown);
+    const summary = toRepoSummary(markdown);
+
+    // Add custom action for drawing a directory diagram
+    summary.nextActions = ["Draw directory diagram", ...summary.nextActions];
+
+    return summary;
   }
 }

@@ -116,7 +116,11 @@ export class PromptBuilder {
     };
   }
 
-  public buildBranchFlowPrompt(context: { repo: RepoContext; branchName: string }): PromptInput {
+  public buildBranchFlowPrompt(context: { repo: RepoContext; branchName: string; directoryScope?: string }): PromptInput {
+    const scopeInstruction = context.directoryScope
+      ? `Focus specifically on the ${context.directoryScope}. `
+      : "";
+
     return {
       system: [
         "You are an expert software engineer building a branch-level code-comprehension flow chart.",
@@ -135,7 +139,7 @@ export class PromptBuilder {
         "If architectural intent is partially inferred, say that in notes or subtitle.",
       ].join(" "),
       user: [
-        `Draw an overall diagram for the current branch.`,
+        `Draw an overall diagram for the current branch. ${scopeInstruction}`,
         `Workspace: ${context.repo.workspaceName}`,
         `Root path: ${context.repo.rootPath}`,
         `Top-level entries:\n${context.repo.topLevelEntries.join("\n") || "(none)"}`,

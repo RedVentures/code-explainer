@@ -52,12 +52,12 @@ export function createExplainDirectoryCommand(
       loadingMessage: `Analyzing the ${dirName} directory.`,
       forceRefresh,
       getFresh: () => analysisService.analyze(directoryPath),
-      render: (result, refresh) =>
+      render: (result, refresh, source) =>
         panel.show(result, {
           onAction: (action) => void handlePanelAction(action, panel),
           onFileRef: (fileRef) => void openFileRef(fileRef),
           onRefresh: refresh,
-        }),
+        }, source),
     });
   };
 }

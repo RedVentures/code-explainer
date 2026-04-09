@@ -48,9 +48,15 @@ function renderCards(result: AnalysisResult): string {
     .join("");
 }
 
-function renderActions(): string {
-  // Only show the Refresh Result button - other actions are available in the sidebar
-  return `<button class="action" data-refresh="true">Refresh Result</button>`;
+function renderActions(result: AnalysisResult): string {
+  const buttons = [`<button class="action" data-refresh="true">Refresh Result</button>`];
+
+  // Add Draw Directory Diagram button for directory results
+  if ("nextActions" in result && result.nextActions.some((action) => action.toLowerCase().includes("directory") && action.toLowerCase().includes("diagram"))) {
+    buttons.push(`<button class="action" data-action="Draw directory diagram">Draw Directory Diagram</button>`);
+  }
+
+  return buttons.join("");
 }
 
 function renderTabs(result: AnalysisResult): string {
@@ -281,7 +287,7 @@ export function renderHtml(title: string, result: AnalysisResult): string {
       <body>
         <h1>${escapeHtml(title)}</h1>
         <div class="headline">${escapeHtml(result.headline)}</div>
-        <div class="actions">${renderActions()}</div>
+        <div class="actions">${renderActions(result)}</div>
         ${renderTabs(result)}
         <div class="panel-view" data-panel="summary">
           ${renderCards(result)}
