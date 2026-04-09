@@ -48,12 +48,9 @@ function renderCards(result: AnalysisResult): string {
     .join("");
 }
 
-function renderActions(result: AnalysisResult): string {
-  const actions = "nextActions" in result ? result.nextActions : ["Explain selection", "Compare branch with main"];
-  return [
-    `<button class="action" data-refresh="true">Refresh Result</button>`,
-    ...actions.map((action) => `<button class="action" data-action="${escapeHtml(action)}">${escapeHtml(action)}</button>`),
-  ].join("");
+function renderActions(): string {
+  // Only show the Refresh Result button - other actions are available in the sidebar
+  return `<button class="action" data-refresh="true">Refresh Result</button>`;
 }
 
 function renderTabs(result: AnalysisResult): string {
@@ -284,7 +281,7 @@ export function renderHtml(title: string, result: AnalysisResult): string {
       <body>
         <h1>${escapeHtml(title)}</h1>
         <div class="headline">${escapeHtml(result.headline)}</div>
-        <div class="actions">${renderActions(result)}</div>
+        <div class="actions">${renderActions()}</div>
         ${renderTabs(result)}
         <div class="panel-view" data-panel="summary">
           ${renderCards(result)}
