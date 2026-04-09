@@ -39,6 +39,11 @@ export async function handlePanelAction(action: string, panel?: ResultsPanel): P
     return;
   }
 
+  if (normalized.includes("pr description")) {
+    await vscode.commands.executeCommand("codeExplainer.generatePrDescription");
+    return;
+  }
+
   await vscode.commands.executeCommand("codeExplainer.explainRepo");
 }
 
